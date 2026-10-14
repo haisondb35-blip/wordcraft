@@ -775,6 +775,9 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
     group(ui, "Editor", None, app, |ui, app| {
         big(ui, app, "editor", "Editor", "review.spelling", json!({}), false);
     });
+    group(ui, "Claude", None, app, |ui, app| {
+        big(ui, app, "researcher", "Claude", "ui.claudePane", json!({}), false);
+    });
 }
 
 fn insert(app: &mut WordApp, ui: &mut Ui) {

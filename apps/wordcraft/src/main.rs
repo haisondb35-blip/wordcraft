@@ -330,6 +330,8 @@ fn main() -> eframe::Result {
             app.watch_desktop_theme(&cc.egui_ctx);
             app.ui.window = restored;
             app.integrated_titlebar = cfg!(target_os = "macos");
+            // The Claude pane opens a channel of its own when first asked: a free port, its key.
+            app = app.with_assistant_control(Box::new(|ctx, key| control_server::start_with_key(ctx.clone(), key.to_string())));
             let mut key_file = None;
             if let Some(port) = control_port
                 && let Some((rx, file)) = control_server::start(port, cc.egui_ctx.clone(), wordcraft_control_key::settings_dir().as_deref())

@@ -74,6 +74,21 @@ pub fn start(port: u16, ctx: egui::Context, settings: Option<&Path>) -> Option<(
     Some((serve_on(listener, ctx, key, FIRST_REQUEST), key_file))
 }
 
+/// The Claude pane's channel: a port the system picks on 127.0.0.1 and `key`, which the pane
+/// hands to the Claude it starts (`WORDCRAFT_CONTROL_KEY`); no key file. Returns the port.
+pub fn start_with_key(ctx: egui::Context, key: String) -> Option<(u16, Receiver<ControlRequest>)> {
+    let listener = match TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => {
+            log::error!("Claude pane: control channel not opened: {e}");
+            return None;
+        }
+    };
+    let port = listener.local_addr().ok()?.port();
+    log::info!("Claude pane control channel on 127.0.0.1:{port}");
+    Some((port, serve_on(listener, ctx, key, FIRST_REQUEST)))
+}
+
 /// A new key: 32 random bytes from the operating system, as hex.
 fn random_key() -> Result<String, String> {
     let mut b = [0u8; 32];

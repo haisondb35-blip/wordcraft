@@ -80,6 +80,19 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 crate::dialogs_review::restrict_pane(app, ui);
             });
     }
+    if app.assistant_open {
+        egui::Panel::right("claude_pane")
+            .default_size(340.0)
+            .resizable(true)
+            .frame(egui::Frame::NONE.fill(t.panel).inner_margin(10).stroke(Stroke::new(1.0, t.border)))
+            .show(ui, |ui| {
+                if header(ui, "Claude") {
+                    app.assistant_open = false;
+                    return;
+                }
+                crate::assistant::pane(app, ui);
+            });
+    }
     if app.session.view.comments_pane {
         egui::Panel::right("comments_pane")
             .default_size(290.0)

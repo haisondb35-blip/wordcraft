@@ -22,6 +22,7 @@ macro_rules! tl {
 
 pub mod a11y;
 pub mod a11y_pane;
+pub mod assistant;
 pub mod autoscroll;
 pub mod backstage;
 pub mod canvas;
@@ -382,6 +383,9 @@ pub struct WordApp {
     /// macOS: the window has no title bar; leave room for the traffic lights.
     pub integrated_titlebar: bool,
     control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
+    /// The Claude pane (Home › Claude): shown or not, and its conversation.
+    pub assistant_open: bool,
+    pub assistant: assistant::Assistant,
     shot_token: u64,
     queued_shots: Vec<(u64, f64, u32)>,
     pending_shots: Vec<(u64, Option<String>, std::sync::mpsc::Sender<Value>, f64)>,
@@ -500,6 +504,8 @@ impl WordApp {
             previews: previews::Previews::default(),
             integrated_titlebar: false,
             control_rx: None,
+            assistant_open: false,
+            assistant: assistant::Assistant::default(),
             shot_token: 0,
             queued_shots: Vec::new(),
             pending_shots: Vec::new(),
@@ -549,6 +555,12 @@ impl WordApp {
 
     pub fn with_control(mut self, rx: std::sync::mpsc::Receiver<ControlRequest>) -> Self {
         self.control_rx = Some(rx);
+        self
+    }
+
+    /// How the Claude pane opens its control channel (the desktop app's server).
+    pub fn with_assistant_control(mut self, starter: assistant::ControlStarter) -> Self {
+        self.assistant.starter = Some(starter);
         self
     }
 
@@ -1070,6 +1082,11 @@ impl WordApp {
                 let dark = p.get("value").and_then(Value::as_bool).unwrap_or(!self.ui_is_dark());
                 self.ui.theme = if dark { theme::Appearance::Dark } else { theme::Appearance::Light };
                 json!({"dark": dark, "theme": self.ui.theme.code()})
+            }
+            "ui.claudePane" => {
+                // Home › Claude: show or hide the pane (`value`; toggles without it).
+                self.assistant_open = p.get("value").and_then(Value::as_bool).unwrap_or(!self.assistant_open);
+                json!({"open": self.assistant_open})
             }
             "ui.theme" => {
                 // `light`, `dark` or `system` (follow the OS appearance); no value reads it.
@@ -1681,7 +1698,17 @@ impl WordApp {
     }
 
     fn drain_control(&mut self, ctx: &egui::Context) {
+        // The Claude pane's own channel, then the `--control` one.
+        if let Some(rx) = self.assistant.control_rx.take() {
+            self.drain_from(&rx, ctx);
+            self.assistant.control_rx = Some(rx);
+        }
         let Some(rx) = self.control_rx.take() else { return };
+        self.drain_from(&rx, ctx);
+        self.control_rx = Some(rx);
+    }
+
+    fn drain_from(&mut self, rx: &std::sync::mpsc::Receiver<ControlRequest>, ctx: &egui::Context) {
         while let Ok(req) = rx.try_recv() {
             let reply = req.reply.clone();
             match control::handle(self, ctx, &req) {
@@ -1696,7 +1723,6 @@ impl WordApp {
                 }
             }
         }
-        self.control_rx = Some(rx);
     }
 
     fn issue_screenshots(&mut self, ctx: &egui::Context) {
