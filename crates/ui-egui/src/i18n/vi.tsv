@@ -2696,3 +2696,16 @@ template	Letter	Thư
 	All Fonts	Tất cả phông chữ
 	Spike	Bộ gom
 	Insert Spike	Chèn bộ gom
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Đang kiểm tra đăng nhập…
+	Signed in:	Đã đăng nhập:
+	Not signed in	Chưa đăng nhập
+	Not installed	Chưa cài đặt
+	Sign-in unknown	Không rõ trạng thái đăng nhập
+	Sign in	Đăng nhập
+	Check the sign-in again	Kiểm tra lại đăng nhập
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Nhờ trợ lý viết, viết lại hoặc định dạng văn bản, hay kiểm tra tài liệu. Thay đổi hiện ngay trong tài liệu và có thể hoàn tác.
+	Working…	Đang làm…
+	Ask a question…	Đặt câu hỏi…
+	Send	Gửi
+	New chat	Cuộc trò chuyện mới

@@ -2648,3 +2648,16 @@ preview	Title	Ukázka
 	All Fonts	Všechna písma
 	Spike	Sběrač
 	Insert Spike	Vložit ze sběrače
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Kontrola přihlášení…
+	Signed in:	Přihlášeno:
+	Not signed in	Nepřihlášeno
+	Not installed	Není nainstalováno
+	Sign-in unknown	Stav přihlášení není známý
+	Sign in	Přihlásit se
+	Check the sign-in again	Znovu zkontrolovat přihlášení
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Požádejte asistenta, aby napsal, přepsal nebo naformátoval text nebo zkontroloval dokument. Změny se v dokumentu objevují průběžně a lze je vrátit zpět.
+	Working…	Pracuje…
+	Ask a question…	Položte otázku…
+	Send	Odeslat
+	New chat	Nová konverzace

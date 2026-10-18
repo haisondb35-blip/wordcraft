@@ -2656,3 +2656,16 @@ preview	Title	Naslov
 	Moved to:	Premješteno u:
 	Spike	Skupljač
 	Insert Spike	Umetni iz skupljača
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Provjera prijave…
+	Signed in:	Prijavljeni:
+	Not signed in	Niste prijavljeni
+	Not installed	Nije instalirano
+	Sign-in unknown	Stanje prijave nije poznato
+	Sign in	Prijava
+	Check the sign-in again	Ponovno provjeri prijavu
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Zamolite asistenta da napiše, preradi ili oblikuje tekst ili da provjeri dokument. Promjene se pojavljuju u dokumentu dok nastaju i mogu se poništiti.
+	Working…	Radi…
+	Ask a question…	Postavite pitanje…
+	Send	Pošalji
+	New chat	Novi razgovor

@@ -2654,3 +2654,16 @@ preview	Title	Пример
 	All Fonts	Все шрифты
 	Spike	Копилка
 	Insert Spike	Вставить из копилки
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Проверка входа…
+	Signed in:	Выполнен вход:
+	Not signed in	Вход не выполнен
+	Not installed	Не установлено
+	Sign-in unknown	Состояние входа неизвестно
+	Sign in	Войти
+	Check the sign-in again	Проверить вход ещё раз
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Попросите помощника написать, переписать или оформить текст либо проверить документ. Изменения появляются в документе по мере их внесения, и их можно отменить.
+	Working…	Выполняется…
+	Ask a question…	Задайте вопрос…
+	Send	Отправить
+	New chat	Новый чат

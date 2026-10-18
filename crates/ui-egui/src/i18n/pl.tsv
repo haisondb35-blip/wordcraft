@@ -2661,3 +2661,16 @@ preview	Title	Tytuł
 	All Fonts	Wszystkie czcionki
 	Spike	Zbieracz
 	Insert Spike	Wstaw ze zbieracza
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Sprawdzanie logowania…
+	Signed in:	Zalogowano:
+	Not signed in	Nie zalogowano
+	Not installed	Nie zainstalowano
+	Sign-in unknown	Nieznany stan logowania
+	Sign in	Zaloguj się
+	Check the sign-in again	Sprawdź logowanie ponownie
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Poproś asystenta o napisanie, przeredagowanie lub sformatowanie tekstu albo o sprawdzenie dokumentu. Zmiany pojawiają się w dokumencie na bieżąco i można je cofnąć.
+	Working…	Pracuje…
+	Ask a question…	Zadaj pytanie…
+	Send	Wyślij
+	New chat	Nowy czat

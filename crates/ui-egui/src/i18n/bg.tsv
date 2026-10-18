@@ -2645,3 +2645,16 @@
 	All Fonts	Всички шрифтове
 	Spike	Натрупване
 	Insert Spike	Вмъкване на натрупаното
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Проверка на влизането…
+	Signed in:	Влезли сте като:
+	Not signed in	Не сте влезли
+	Not installed	Не е инсталирано
+	Sign-in unknown	Неизвестно състояние на влизането
+	Sign in	Вход
+	Check the sign-in again	Проверка на влизането отново
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Помолете асистента да напише, пренапише или форматира текст или да провери документа. Промените се появяват в документа, докато се правят, и могат да бъдат отменени.
+	Working…	Работи…
+	Ask a question…	Задайте въпрос…
+	Send	Изпращане
+	New chat	Нов чат

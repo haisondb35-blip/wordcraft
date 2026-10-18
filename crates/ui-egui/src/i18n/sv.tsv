@@ -2671,3 +2671,16 @@ preview	Title	Titel
 	Moved to:	Flyttat till:
 	Spike	Samlare
 	Insert Spike	Infoga samlare
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Kontrollerar inloggningen…
+	Signed in:	Inloggad:
+	Not signed in	Inte inloggad
+	Not installed	Inte installerad
+	Sign-in unknown	Okänd inloggningsstatus
+	Sign in	Logga in
+	Check the sign-in again	Kontrollera inloggningen igen
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Be assistenten att skriva, skriva om eller formatera text, eller granska dokumentet. Ändringarna visas i dokumentet medan de görs och kan ångras.
+	Working…	Arbetar…
+	Ask a question…	Ställ en fråga…
+	Send	Skicka
+	New chat	Ny chatt

@@ -2653,3 +2653,16 @@ preview	Title	Örnek
 	All Fonts	Tüm Yazı Tipleri
 	Spike	Biriktirici
 	Insert Spike	Biriktiriciyi Ekle
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Oturum açma denetleniyor…
+	Signed in:	Oturum açıldı:
+	Not signed in	Oturum açılmadı
+	Not installed	Yüklü değil
+	Sign-in unknown	Oturum durumu bilinmiyor
+	Sign in	Oturum aç
+	Check the sign-in again	Oturumu yeniden denetle
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Asistandan metin yazmasını, yeniden yazmasını veya biçimlendirmesini ya da belgeyi denetlemesini isteyin. Değişiklikler yapıldıkça belgede görünür ve geri alınabilir.
+	Working…	Çalışıyor…
+	Ask a question…	Bir soru sorun…
+	Send	Gönder
+	New chat	Yeni sohbet

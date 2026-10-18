@@ -2665,3 +2665,16 @@ preview	Title	Esempio
 	All Fonts	Tutti i caratteri
 	Spike	Raccoglitore
 	Insert Spike	Inserisci raccoglitore
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Verifica dell'accesso…
+	Signed in:	Accesso eseguito:
+	Not signed in	Accesso non eseguito
+	Not installed	Non installato
+	Sign-in unknown	Stato dell'accesso sconosciuto
+	Sign in	Accedi
+	Check the sign-in again	Verifica di nuovo l'accesso
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Chiedi all'assistente di scrivere, riscrivere o formattare il testo, oppure di controllare il documento. Le modifiche compaiono nel documento man mano e si possono annullare.
+	Working…	In corso…
+	Ask a question…	Fai una domanda…
+	Send	Invia
+	New chat	Nuova chat

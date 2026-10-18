@@ -2652,3 +2652,16 @@
 	All Fonts	Összes betűtípus
 	Spike	Gyűjtő
 	Insert Spike	Beszúrás a gyűjtőből
+# The assistant pane (Claude / ChatGPT): sign-in status and the question box.
+	Checking sign-in…	Bejelentkezés ellenőrzése…
+	Signed in:	Bejelentkezve:
+	Not signed in	Nincs bejelentkezve
+	Not installed	Nincs telepítve
+	Sign-in unknown	A bejelentkezés állapota ismeretlen
+	Sign in	Bejelentkezés
+	Check the sign-in again	Bejelentkezés újbóli ellenőrzése
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Kérje meg az asszisztenst, hogy írjon, írjon át vagy formázzon szöveget, vagy ellenőrizze a dokumentumot. A módosítások menet közben megjelennek a dokumentumban, és visszavonhatók.
+	Working…	Dolgozik…
+	Ask a question…	Tegyen fel egy kérdést…
+	Send	Küldés
+	New chat	Új csevegés
