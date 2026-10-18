@@ -145,6 +145,7 @@
 	Apply to:	Appliquer à :
 	Whole document	Tout le document
 	This section	Cette section
+	Selected text	Texte sélectionné
 	Fill	Remplissage
 	Setting:	Type :
 	3-D	3-D
@@ -524,10 +525,14 @@
 	Modify…	Modifier…
 	Move or Resize	Déplacer ou redimensionner
 	Multilevel List	Liste à plusieurs niveaux
+	Multilevel List Library	Bibliothèque de listes à plusieurs niveaux
+	Article I.	Article I.
+	Chapter 1	Chapitre 1
+	Section 1.01	Section 1.01
 	Multiple Pages	Plusieurs pages
 	Name (A–Z)	Nom (A–Z)
 	Name:	Nom :
-	Narrow  0.5" all	Étroites — 0,5" partout
+	Narrow  {size} all	Étroites — {size} partout
 	Navigation	Navigation
 	Navigation Pane	Volet de navigation
 	New	Nouveau
@@ -554,7 +559,7 @@
 	Nonbreaking Hyphen	Tiret insécable
 	Nonbreaking Space	Espace insécable
 	None	Aucun
-	Normal  1" all	Normales — 1" partout
+	Normal  {size} all	Normales — {size} partout
 	Normal Style	Style Normal
 	Not available right now	Indisponible pour le moment
 	Not saved	Non enregistré
@@ -1408,6 +1413,8 @@
 	Math AutoCorrect	Correction automatique mathématique
 	More >>	Plus >>
 	Moves	Déplacements
+	Moved from:	Déplacé depuis :
+	Moved to:	Déplacé vers :
 	New document	Nouveau document
 	No changes (read only)	Aucune modification (lecture seule)
 	Only allow this kind of editing:	Autoriser uniquement ce type de modification :
@@ -1837,6 +1844,7 @@
 	Hyphenation zone:	Zone de césure :
 	Italian	Italien
 	Croatian	Croate
+	Indonesian	Indonésien
 	Japanese	Japonais
 	Korean	Coréen
 	Limit consecutive hyphens to:	Limiter les césures consécutives à :
@@ -2080,6 +2088,16 @@
 	Reading Column Width	Largeur de colonne de lecture
 	Reading Line Spacing	Interligne de lecture
 	Reading Text Size	Taille du texte de lecture
+	Odd Banded Rows	Lignes à bandes impaires
+	Even Banded Rows	Lignes à bandes paires
+	Odd Banded Columns	Colonnes à bandes impaires
+	Even Banded Columns	Colonnes à bandes paires
+	Top Left Cell	Cellule en haut à gauche
+	Top Right Cell	Cellule en haut à droite
+	Bottom Left Cell	Cellule en bas à gauche
+	Bottom Right Cell	Cellule en bas à droite
+	Inside Horizontal Border	Bordure intérieure horizontale
+	Inside Vertical Border	Bordure intérieure verticale
 	Filter Recipients	Filtrer les destinataires
 	Sort Recipients	Trier les destinataires
 	Filter and Sort	Filtrer et trier
@@ -2219,3 +2237,30 @@
 	Existing File or Web Page	Fichier ou page web existant(e)
 	Link to:	Lier à :
 	Place in This Document	Emplacement dans ce document
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Colonne {n}
+	Header row	Ligne d’en-tête
+	No header row	Pas de ligne d’en-tête
+	My list has	Ma liste a
+# Table Layout › Formula dialog (#1210)
+	Formula:	Formule :
+	Paste function:	Coller une fonction :
+# Reading Mode column widths (#1040)
+	Narrow	Étroite
+	Medium	Moyenne
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Fusionner les cellules avant le fractionnement
+	Table size	Taille du tableau
+	AutoFit behavior	Comportement de l'ajustement automatique
+	Initial column width:	Largeur de colonne initiale :
+	AutoFit to contents	Ajustement automatique au contenu
+	AutoFit to window	Ajustement automatique à la fenêtre
+	Separate text at	Séparer le texte au niveau des
+	Commas	Virgules
+	Other:	Autre :
+	The number must be between 1 and {max}.	Le nombre doit être compris entre 1 et {max}.
+	The measurement must be between {min} and {max}.	La mesure doit être comprise entre {min} et {max}.
+	Recently Used Fonts	Polices récemment utilisées
+	All Fonts	Toutes les polices
+	Spike	Pique-notes
+	Insert Spike	Insérer le pique-notes

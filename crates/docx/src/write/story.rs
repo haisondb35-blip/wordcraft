@@ -224,10 +224,10 @@ impl Writer<'_> {
         }
         // Taken before the content so a nested story (a text box in an entry) can't claim them.
         if std::mem::take(&mut self.toc_begin_here)
-            && let Some((instr, locked, props)) = self.toc_field.take()
+            && let Some((instr, locked, dirty, props)) = self.toc_field.take()
         {
             self.rev_open(w, &props);
-            self.field_start(w, &instr, locked, "", &props);
+            self.field_start(w, &instr, locked, dirty, "", &props);
             self.rev_close(w, &props);
         }
         let toc_end = std::mem::take(&mut self.toc_end_here);
@@ -247,7 +247,16 @@ impl Writer<'_> {
         // Split into pieces with their props.
         let mut pieces: Vec<(Piece, &CharProps)> = Vec::new();
         let mut k = 0usize;
-        for (range, props) in p.run_ranges() {
+        // Runs of mixed direction are split so Word orders them as WordCraft does (#1543).
+        let rtl_para = self.doc.styles.resolve_para(&p.props).bidi;
+        let styles = &self.doc.styles;
+        let para_style = p.props.style.as_deref();
+        let para_lang = super::bidi::para_inherits_lang_bidi(styles, para_style);
+        let spans =
+            super::bidi::direction_spans(&p.text, rtl_para, p.run_ranges(), |c| para_lang || super::bidi::char_style_has_lang_bidi(styles, c));
+        for (range, props) in &spans {
+            let props: &CharProps = props;
+            let range = range.clone();
             let base = range.start;
             let Some(text) = p.text.get(range) else { continue };
             let mut buf = String::new();
@@ -496,10 +505,10 @@ impl Writer<'_> {
                     None => super::math::write_equation(w, linear, *display, math, color),
                 }
             }
-            InlineObject::Field { instr, result, locked, form, .. } => self.field(w, instr, result, *locked, form, props),
-            InlineObject::FieldStart { instr, locked } => {
+            InlineObject::Field { instr, result, locked, dirty, form, .. } => self.field(w, instr, result, *locked, *dirty, form, props),
+            InlineObject::FieldStart { instr, locked, dirty } => {
                 self.rev_open(w, props);
-                self.field_start(w, instr, *locked, "", props);
+                self.field_start(w, instr, *locked, *dirty, "", props);
                 self.rev_close(w, props);
             }
             InlineObject::FieldEnd => {
@@ -520,7 +529,12 @@ impl Writer<'_> {
                         self.rev_open(w, props);
                         w.open("w:r", &[]);
                         self.rpr(w, &p);
-                        w.empty(mark, &[]);
+                        // A custom mark is plain text; the placeholder would turn it into a number.
+                        if custom.is_empty() {
+                            w.empty(mark, &[]);
+                        } else {
+                            w.leaf("w:t", &[("xml:space", "preserve")], custom);
+                        }
                         w.close("w:r");
                         self.rev_close(w, props);
                     }
@@ -780,6 +794,17 @@ impl Writer<'_> {
                 w.close("w:r");
                 self.rev_close(w, props);
             }
+            InlineObject::PositionalTab { align, relative_to, leader } => {
+                self.rev_open(w, props);
+                w.open("w:r", &[]);
+                self.rpr(w, props);
+                w.empty(
+                    "w:ptab",
+                    &[("w:relativeTo", relative_to.ooxml()), ("w:alignment", align.ooxml()), ("w:leader", super::props::tab_leader(*leader))],
+                );
+                w.close("w:r");
+                self.rev_close(w, props);
+            }
             InlineObject::Opaque { format, xml, text } => {
                 if format == "docx" && crate::xml::parse(xml.as_bytes()).is_ok() {
                     w.raw(xml);
@@ -795,11 +820,11 @@ impl Writer<'_> {
         }
     }
 
-    fn field(&mut self, w: &mut W, instr: &str, result: &str, locked: bool, form: &str, props: &CharProps) {
+    fn field(&mut self, w: &mut W, instr: &str, result: &str, locked: bool, dirty: bool, form: &str, props: &CharProps) {
         if self.toc_hold_end && is_toc(instr) {
             // A TOC heading's field opens in the first entry and closes after the last (see `toc_span`).
             self.toc_hold_end = false;
-            self.toc_field = Some((instr.to_string(), locked, props.clone()));
+            self.toc_field = Some((instr.to_string(), locked, dirty, props.clone()));
             return;
         }
         if let Some(e) = wordcraft_doc::eq::Enclosure::parse(instr) {
@@ -816,7 +841,7 @@ impl Writer<'_> {
             w.close("w:r");
         };
         self.rev_open(w, props);
-        self.field_start(w, instr, locked, form, props);
+        self.field_start(w, instr, locked, dirty, form, props);
         if !result.is_empty() {
             run(w, &|w| {
                 let mut buf = String::new();
@@ -896,7 +921,7 @@ impl Writer<'_> {
     /// A field's begin, instruction and separate runs.
     /// A field's begin, code and separator; `form` is a legacy form field's `w:ffData`, which
     /// belongs inside the begin.
-    fn field_start(&self, w: &mut W, instr: &str, locked: bool, form: &str, props: &CharProps) {
+    fn field_start(&self, w: &mut W, instr: &str, locked: bool, dirty: bool, form: &str, props: &CharProps) {
         let del = self.is_del(props);
         let run = |w: &mut W, f: &dyn Fn(&mut W)| {
             w.open("w:r", &[]);
@@ -905,11 +930,17 @@ impl Writer<'_> {
             w.close("w:r");
         };
         run(w, &|w| {
-            let attrs: &[(&str, &str)] = if locked { &[("w:fldCharType", "begin"), ("w:fldLock", "1")] } else { &[("w:fldCharType", "begin")] };
+            let mut attrs: Vec<(&str, &str)> = vec![("w:fldCharType", "begin")];
+            if locked {
+                attrs.push(("w:fldLock", "1"));
+            }
+            if dirty {
+                attrs.push(("w:dirty", "true"));
+            }
             if form.is_empty() {
-                w.empty("w:fldChar", attrs);
+                w.empty("w:fldChar", &attrs);
             } else {
-                w.open("w:fldChar", attrs);
+                w.open("w:fldChar", &attrs);
                 w.raw(form);
                 w.close("w:fldChar");
             }
@@ -1037,6 +1068,7 @@ impl Writer<'_> {
                     w.empty("a:srgbClr", &[("val", &c.hex())]);
                 }
                 w.close("a:solidFill");
+                line_dash(w, &extra.dash);
                 if ink {
                     w.empty("a:round", &[]);
                 }
@@ -1046,6 +1078,7 @@ impl Writer<'_> {
             None => {
                 w.open("a:ln", &[]);
                 w.empty("a:noFill", &[]);
+                line_dash(w, &extra.dash);
                 w.close("a:ln");
             }
         }
@@ -1480,6 +1513,28 @@ fn cust_geom(w: &mut W, f: &wordcraft_doc::freeform::Freeform, sw: f32, sh: f32)
     }
     w.close("a:pathLst");
     w.close("a:custGeom");
+}
+
+/// Explicit DrawingML outline dashes, before joins and arrowheads.
+fn line_dash(w: &mut W, dash: &wordcraft_doc::line_dash::LineDash) {
+    use wordcraft_doc::line_dash::{LineDash, MAX_DASH_STOPS};
+    if dash.is_solid() {
+        return;
+    }
+    if let Some(preset) = dash.ooxml() {
+        w.empty("a:prstDash", &[("val", preset)]);
+        return;
+    }
+    if let LineDash::Custom(stops) = dash {
+        if stops.is_empty() {
+            return;
+        }
+        w.open("a:custDash", &[]);
+        for (d, sp) in stops.iter().take(MAX_DASH_STOPS) {
+            w.empty("a:ds", &[("d", &d.to_string()), ("sp", &sp.to_string())]);
+        }
+        w.close("a:custDash");
+    }
 }
 
 /// A shape's `a:effectLst` (ECMA-376 Part 1 §20.1.8.26), children in schema order.

@@ -17,6 +17,8 @@ use crate::theme::{Tokens, regular, semibold};
 /// Points on screen per document point at 100% (96 px per inch, like a word processor).
 pub const PX_PER_PT: f32 = 96.0 / 72.0;
 const GAP: f32 = 18.0;
+/// Width reserved for the vertical scrollbar beside the canvas.
+const SCROLLBAR: f32 = 14.0;
 const RULER: f32 = 22.0;
 /// Maximum device-pixel height of a tile on very tall Web/Draft pages.
 const TILE_HEIGHT_PX: usize = 1024;
@@ -43,13 +45,17 @@ pub struct CanvasState {
     /// revision: finding out walks every paragraph, too slow for every frame (#811).
     markup_facts: std::cell::Cell<Option<((u64, u64), [bool; 3])>>,
     pub scroll_to_caret: bool,
+    /// Set while a command runs for a mouse drag on a table: the pointer is already
+    /// on the target, so the view stays put instead of following the caret (#1738).
+    pub keep_view: bool,
     /// A heading navigation click aligns its page against the navigation pane, not just visible.
     pub(crate) nav_to_caret: bool,
     /// Touchpad travel not yet converted to an entire reading-column turn.
     read_wheel_accum: f32,
     /// Last actual viewport seen during a resize, distinct from the committed reading page size.
-    read_viewport: Option<egui::Vec2>,
-    read_resized_at: f64,
+    read_viewport: Settle,
+    /// The same for Web Layout's window-wide text width (#1876).
+    web_viewport: Settle,
     /// Reading controls (as opposed to window resizes) must reflow without debounce.
     pub(crate) read_force_reflow: bool,
     /// First text position on the column currently leading the reading viewport, captured from
@@ -148,6 +154,13 @@ pub struct CanvasState {
     /// The last key ran an Alt shortcut: the text its key sends (it may arrive a frame later)
     /// isn't typed. The next key press clears it.
     pub(crate) swallow_text: bool,
+    /// An input method's `DeleteSurrounding` just erased text with this formatting: the text it
+    /// sends next replaces it, keeps the formatting and joins the same undo step
+    /// (`keys::delete_surrounding`, #1480).
+    pub(crate) ime_join_text: Option<wordcraft_doc::props::CharProps>,
+    /// An automatic change (AutoCorrect, AutoFormat) altered the text around the caret: the
+    /// input method is asked to start afresh (#1480).
+    pub(crate) ime_reset: bool,
     /// Alt+numpad entry in progress: the digits typed while Alt is held (#961).
     pub(crate) alt_code: String,
     /// The character an Alt code just typed: if the platform also sends its own composed
@@ -159,6 +172,10 @@ pub struct CanvasState {
     pub(crate) a11y: crate::a11y::A11yCache,
     /// A press on a table's selection area or move handle, held (`table_mouse`).
     pub(crate) table_drag: Option<crate::table_mouse::TableDrag>,
+    /// The kind of tab stop a click on the ruler sets (the selector in the rulers' corner).
+    pub tab_kind: wordcraft_doc::props::TabAlign,
+    /// A tab stop being placed or dragged on the ruler (`ruler_tabs`).
+    pub(crate) tab_drag: Option<crate::ruler_tabs::TabDrag>,
 }
 
 impl CanvasState {
@@ -184,10 +201,11 @@ impl Default for CanvasState {
             page_keys: PageKeys::default(),
             markup_facts: std::cell::Cell::new(None),
             scroll_to_caret: true,
+            keep_view: false,
             nav_to_caret: false,
             read_wheel_accum: 0.0,
-            read_viewport: None,
-            read_resized_at: 0.0,
+            read_viewport: Settle::default(),
+            web_viewport: Settle::default(),
             read_force_reflow: false,
             read_first_visible: None,
             read_target_page: None,
@@ -225,6 +243,8 @@ impl Default for CanvasState {
             mini_dismissed: None,
             pasted: false,
             swallow_text: false,
+            ime_join_text: None,
+            ime_reset: false,
             alt_code: String::new(),
             alt_code_echo: None,
             wheel: Default::default(),
@@ -245,6 +265,8 @@ impl Default for CanvasState {
             link_from: None,
             a11y: Default::default(),
             table_drag: None,
+            tab_kind: Default::default(),
+            tab_drag: None,
         }
     }
 }
@@ -430,6 +452,49 @@ fn place_pages(sizes: &[(f32, f32)], markup: f32, scale: f32, cols: usize, avail
     (rects, vec2(content_w, y.max(avail.y)))
 }
 
+/// Full pagination is expensive. During a resize keep the already laid-out pages and reflow
+/// once the viewport has been stable this long (seconds).
+const RESIZE_SETTLE: f64 = 0.16;
+
+/// A layout size that follows the window (Read Mode's columns, Web Layout's width): the last
+/// viewport seen and when it last changed, so a window drag reflows once it settles, not per frame.
+#[derive(Clone, Copy, Debug, Default)]
+struct Settle {
+    viewport: Option<egui::Vec2>,
+    resized_at: f64,
+}
+
+impl Settle {
+    /// Whether nothing has been seen since the view was entered (or [`Settle::leave`]).
+    fn entering(&self) -> bool {
+        self.viewport.is_none()
+    }
+
+    /// Notes this frame's viewport `size` at time `now`. Returns whether a layout size that
+    /// `changed` should be applied now: at once when entering or `forced`, otherwise only after
+    /// the viewport has held still for [`RESIZE_SETTLE`].
+    fn apply(&mut self, size: egui::Vec2, now: f64, changed: bool, forced: bool) -> bool {
+        let entering = self.entering();
+        if self.viewport.is_none_or(|v| (v - size).length_sq() > 0.5) {
+            self.viewport = Some(size);
+            self.resized_at = now;
+        }
+        changed && (entering || forced || now - self.resized_at >= RESIZE_SETTLE)
+    }
+
+    fn leave(&mut self) {
+        self.viewport = None;
+    }
+}
+
+/// Web Layout's text width in points for a work area `avail_px` wide at `scale`: the whole width,
+/// clamped to what the layout accepts so a tiny or huge window never gives zero or a giant page.
+fn web_layout_width(avail_px: f32, scale: f32) -> f32 {
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { PX_PER_PT };
+    let w = avail_px / scale;
+    if w.is_finite() { w.clamp(144.0, 20_000.0) } else { 800.0 }
+}
+
 /// Reading columns use readable text at the user's chosen zoom. The window holds roughly 3–5
 /// narrow, full-height columns, and a resize reflows the text, not just the paper scale.
 fn reading_size(avail: egui::Vec2, scale: f32, requested: Option<f32>) -> (f32, f32) {
@@ -442,7 +507,28 @@ fn reading_size(avail: egui::Vec2, scale: f32, requested: Option<f32>) -> (f32, 
         let count = (width / 295.0).round().clamp(1.0, 5.0);
         ((width - (count + 1.0) * GAP) / count).max(192.0)
     };
-    (px / scale, (height - 2.0 * GAP).max(192.0) / scale)
+    // The columns end above the page-turn bar, which used to cover their last lines (#1772).
+    (px / scale, (height - GAP - READ_NAV_BAR).max(192.0) / scale)
+}
+
+/// Height kept free under Read Mode's columns for the page-turn bar at the bottom right.
+const READ_NAV_BAR: f32 = 44.0;
+
+/// The part of the canvas Read Mode scrolls in: as many whole columns as fit, centred. A chosen
+/// column width (or a resize) otherwise left the last column cut off at the right edge (#1772).
+/// `scale` is pixels per point: the column width is only re-laid out when it moves by more than
+/// half a point, so each column may overrun by that much before one is dropped.
+fn reading_viewport(full: Rect, column_px: f32, scale: f32) -> Rect {
+    if !column_px.is_finite() || column_px <= 0.0 || !full.width().is_finite() {
+        return full;
+    }
+    let step = column_px + GAP;
+    let slack = if scale.is_finite() { (0.5 * scale).clamp(0.0, 4.0) } else { 0.0 };
+    // A hair of tolerance too: columns sized to fill the canvas exactly come back from points
+    // as 2.9999998 of them, and flooring that dropped a whole column.
+    let whole = ((full.width() - GAP) / (step - slack) + 1e-3).floor().max(1.0);
+    let width = (whole * step + GAP).min(full.width());
+    Rect::from_min_size(pos2(full.center().x - width / 2.0, full.min.y), vec2(width, full.height()))
 }
 
 /// A single horizontal row of reflowed reading pages; no wrapping at the viewport edge.
@@ -578,6 +664,20 @@ pub fn geometry(app: &WordApp, l: &DocLayout, avail: egui::Vec2) -> Geometry {
     };
     let cols = columns_for(avail.x, maxw * scale, l.pages.len(), min_cols, auto);
     let sizes: Vec<(f32, f32)> = l.pages.iter().map(|p| (p.w, p.h)).collect();
+    if v.mode == wordcraft_layout::ViewMode::Web {
+        // The sheet runs from side to side of the work area, no centred page with grey margins.
+        let rects: Vec<Rect> = sizes
+            .iter()
+            .scan(0.0f32, |y, &(w, h)| {
+                let r = Rect::from_min_size(pos2(0.0, *y), vec2(sane_dim(w, 1e5) * scale, sane_dim(h, 1e6) * scale));
+                *y = r.bottom();
+                Some(r)
+            })
+            .collect();
+        let size = vec2(rects.iter().map(|r| r.right()).fold(avail.x.max(0.0), f32::max), rects.last().map_or(0.0, |r| r.bottom()).max(avail.y));
+        let bands = rects.iter().map(|r| (0.0, r.height())).collect();
+        return Geometry { rects, size, scale, cols: 1, bands };
+    }
     let (mut rects, mut size) = place_pages(&sizes, markup, scale, cols, avail);
     let mut bands: Vec<(f32, f32)> = rects.iter().map(|r| (0.0, r.height())).collect();
     let editing_part = matches!(app.session.sel.focus.story, StoryRef::Part(_));
@@ -775,23 +875,18 @@ fn drawing_grid_step(spacing: f32, scale: f32) -> f32 {
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let full = ui.available_rect_before_wrap();
-    // Full pagination is expensive. During a resize keep the already laid-out columns and
-    // reflow once the viewport has been stable briefly; ordinary reading controls update now.
-    const RESIZE_SETTLE: f64 = 0.16;
+    // During a resize keep the already laid-out pages ([`Settle`]); ordinary reading controls
+    // and zoom update now.
     let mut reflow_anchor: Option<Pos> = None;
+    let now = ui.input(|i| i.time);
     if app.session.view.read_mode {
-        let now = ui.input(|i| i.time);
-        let resized = app.canvas.read_viewport.is_none_or(|v| (v - full.size()).length_sq() > 0.5);
-        let entering = app.canvas.read_viewport.is_none();
-        if resized {
-            app.canvas.read_viewport = Some(full.size());
-            app.canvas.read_resized_at = now;
-        }
+        app.canvas.web_viewport.leave();
+        let entering = app.canvas.read_viewport.entering();
         let scale = app.session.view.read_zoom.clamp(0.75, 1.5) * PX_PER_PT;
         let (w, h) = reading_size(full.size(), scale, app.session.view.read_column_width);
         let changed = (app.session.view.read_width - w).abs() > 0.5 || (app.session.view.read_height - h).abs() > 0.5;
         let forced = std::mem::take(&mut app.canvas.read_force_reflow) || entering;
-        if changed && (forced || now - app.canvas.read_resized_at >= RESIZE_SETTLE) {
+        if app.canvas.read_viewport.apply(full.size(), now, changed, forced) {
             if !entering {
                 reflow_anchor = app.canvas.read_first_visible.clone();
             }
@@ -806,7 +901,24 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             reflow_anchor = app.canvas.read_first_visible.clone();
         }
     } else {
-        app.canvas.read_viewport = None;
+        if app.session.view.mode == wordcraft_layout::ViewMode::Web {
+            // Web Layout wraps to the work area (#1876): at once on entry or a zoom (the viewport
+            // holds still), after a window drag has settled, and only on a real change.
+            let scale = app.session.view.zoom.clamp(0.1, 5.0) * PX_PER_PT;
+            let w = web_layout_width(full.width() - SCROLLBAR, scale);
+            let changed = (app.session.view.web_width - w).abs() > 0.5;
+            let entering = app.canvas.web_viewport.entering();
+            if app.canvas.web_viewport.apply(full.size(), now, changed, false) {
+                app.session.view.web_width = w;
+                // The pixel offset no longer points at the same text: keep the caret's line in view.
+                app.canvas.scroll_to_caret |= !entering;
+            } else if changed {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(170));
+            }
+        } else {
+            app.canvas.web_viewport.leave();
+        }
+        app.canvas.read_viewport.leave();
         app.canvas.read_force_reflow = false;
         app.canvas.read_first_visible = None;
         app.canvas.read_target_page = None;
@@ -840,6 +952,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     } else {
         (None, None, full)
     };
+    let area = if app.session.view.read_mode {
+        let column = app.session.view.read_width * app.session.view.read_zoom.clamp(0.75, 1.5) * PX_PER_PT;
+        reading_viewport(area, column, app.session.view.read_zoom.clamp(0.75, 1.5) * PX_PER_PT)
+    } else {
+        area
+    };
     app.canvas.canvas_rect = Some(area);
     // Ctrl/⌘ + wheel (and trackpad pinch) zooms the document, like Word. egui reports both as a
     // zoom factor and doesn't scroll for them. Start from the shown scale so fit modes zoom too.
@@ -856,9 +974,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         }
         let pct = (app.canvas.scale / PX_PER_PT * zoom_delta * 100.0).clamp(if reading { 75.0 } else { 10.0 }, if reading { 150.0 } else { 500.0 });
         let id = if reading { "view.readTextSize" } else { "view.zoom" };
+        app.canvas.wheel.cancel();
         let _ = app.run(id, json!({"value": pct}));
     }
-    let avail = if app.session.view.read_mode { area.size() } else { area.size() - vec2(14.0, 0.0) };
+    let avail = if app.session.view.read_mode { area.size() } else { area.size() - vec2(SCROLLBAR, 0.0) };
     let geo = geometry(app, &layout, avail);
     // A pane or toolbar resize changes the reachable last column immediately. Navigation must
     // clamp against this frame's geometry, not the previous frame's scroll maximum.
@@ -945,7 +1064,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     // momentum, wheel notches eased in (or all at once with animation effects off). Applied
     // before drawing, so it shows this frame. In reading mode, wheel and touchpad events turn
     // whole columns instead.
-    let hovered = wheel_hovered(ui.rect_contains_pointer(area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
+    // Read Mode's centred columns leave margins at the sides; the wheel turns pages over them too.
+    let wheel_area = if app.session.view.read_mode { full } else { area };
+    let hovered = wheel_hovered(ui.rect_contains_pointer(wheel_area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
     let notch = crate::scroll::notch_px(app.canvas.scale / PX_PER_PT);
     let wheel_delta = if app.session.view.read_mode {
         let turns = ui.input(|i| read_wheel_turns(&i.events, hovered, &mut app.canvas.read_wheel_accum));
@@ -1031,11 +1152,18 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let out = scroll_area.show_viewport(&mut ui_area, |ui, viewport| {
         origin = ui.min_rect().min - viewport.min.to_vec2();
         let content = Rect::from_min_size(ui.min_rect().min, geo.size);
-        let resp = ui.allocate_rect(content, Sense::click_and_drag());
+        // A fixed id: an automatic one follows how many widgets came before, which Read Mode's
+        // chrome changes, and a new id dropped the keyboard focus, so the arrows, Page Up/Down
+        // and Escape did nothing in Read Mode until the reader clicked a page (#1772).
+        ui.advance_cursor_after_rect(content);
+        let resp = ui.interact(content, egui::Id::new("wordcraft_canvas"), Sense::click_and_drag());
         if let Some(tr) = scroll_target {
             ui.scroll_to_rect(Rect::from_min_size(ui.min_rect().min + tr.min.to_vec2(), tr.size()), None);
         }
-        let painter = ui.painter_at(ui.clip_rect());
+        // Read Mode's neighbouring columns end right at the viewport's edges: keep their
+        // shadows from showing there as hairlines.
+        let clip = if app.session.view.read_mode { ui.clip_rect().shrink2(vec2(3.0, 0.0)) } else { ui.clip_rect() };
+        let painter = ui.painter_at(clip);
         let ppp = ui.ctx().pixels_per_point();
         let max_tex = ui.ctx().input(|i| i.max_texture_side).min(wordcraft_render::MAX_SIDE as usize).max(1) as f32;
         let mut visible_tile_keys = HashSet::new();
@@ -1303,6 +1431,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         }
         // Caret.
         let focused = resp.has_focus() || app.canvas.focused;
+        // After an automatic change, the web's text agent starts afresh (`keys::note_automatic_change`).
+        // Only there: on X11 an interrupt recreates the input context and fcitx drops later keys (#1169).
+        let ime_reset = std::mem::take(&mut app.canvas.ime_reset) && cfg!(target_arch = "wasm32") && app.canvas.ime_preedit.is_empty();
         // Editing an equation: shade it and draw the caret inside it.
         let mut math_caret = false;
         if let Some(m) = app.session.math.clone()
@@ -1336,7 +1467,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                             rect: cr,
                             cursor_rect: cr,
                             purpose: Default::default(),
-                            should_interrupt_composition: false,
+                            should_interrupt_composition: ime_reset,
                         });
                     });
                 }
@@ -1374,8 +1505,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let cr = Rect::from_min_max(pos2(x, y0), pos2(x + 1.0, y1));
             if focused {
                 ui.ctx().output_mut(|o| {
-                    o.ime =
-                        Some(egui::output::IMEOutput { rect: cr, cursor_rect: cr, purpose: Default::default(), should_interrupt_composition: false });
+                    o.ime = Some(egui::output::IMEOutput {
+                        rect: cr,
+                        cursor_rect: cr,
+                        purpose: Default::default(),
+                        should_interrupt_composition: ime_reset,
+                    });
                 });
             }
             if !app.canvas.ime_preedit.is_empty() {
@@ -1389,7 +1524,13 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 );
                 if !new.is_empty() {
                     app.canvas.ime_faces.extend(new);
-                    crate::theme::install_fonts_extra(ui.ctx(), app.fonts_hans, app.fonts_system_cjk, &app.canvas.ime_faces);
+                    crate::theme::install_fonts_language_extra(
+                        ui.ctx(),
+                        app.fonts_hans,
+                        app.fonts_korean,
+                        app.fonts_system_cjk,
+                        &app.canvas.ime_faces,
+                    );
                     ui.ctx().request_repaint();
                 }
                 let caret_color = caret_color(app);
@@ -1659,7 +1800,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
         let text = format!("{}: {}", tl!("Deleted"), d.text);
         by_page.entry(c.page).or_default().push((c.x, c.top + c.height, Balloon::Format(d.author, text), d.at));
     }
-    let palette = [t.blue, Color32::from_rgb(0xB0, 0x3A, 0x2E), Color32::from_rgb(0x2E, 0x7D, 0x32), Color32::from_rgb(0x8E, 0x44, 0xAD), t.orange];
+    let palette = t.author_colors;
+    let leaders = t.leader_colors;
     let mut authors: Vec<String> = Vec::new();
     let mut clicked: Option<(u32, Pos)> = None;
     // The markup area extends each page.
@@ -1667,8 +1809,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
         let page_scale = layout.pages.get(pi).map_or(scale, |page| page_screen_scale(*pr, page, scale));
         let area = Rect::from_min_max(pos2(pr.max.x, pr.min.y), pos2(pr.max.x + mw * page_scale, pr.max.y));
         if mw > 0.0 && area.intersects(clip) {
-            painter.rect_filled(area, 0.0, Color32::from_rgb(0xF3, 0xF3, 0xF3));
-            painter.line_segment([area.left_top(), area.left_bottom()], Stroke::new(1.0, Color32::from_rgb(0xE0, 0xE0, 0xE0)));
+            painter.rect_filled(area, 0.0, t.markup_area);
+            painter.line_segment([area.left_top(), area.left_bottom()], Stroke::new(1.0, t.markup_edge));
         }
     }
     let mut pages: Vec<usize> = by_page.keys().copied().collect();
@@ -1712,7 +1854,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                         continue;
                     }
                     let lead = Stroke::new(1.0, color.linear_multiply(0.7));
-                    dashed(painter, anchor, pos2(pr.max.x, anchor.y), lead);
+                    let on_page = Stroke::new(1.0, leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(0.7));
+                    dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                     painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
                     card_shapes(painter, &t, card, color, false, None);
                     let y = card.min.y + 6.0;
@@ -1742,14 +1885,14 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                 Rect::from_min_size(pos2(x0, top), vec2(w, app.canvas.balloon_h.max(24.0)))
             } else {
                 let dim = |r: bool| if r { t.text_dim } else { t.text };
-                lines.push((painter.layout(author, semibold(fs), t.text, w - 16.0), 0.0));
+                lines.push((balloon_text(painter, author, semibold(fs), t.text, w - 16.0), 0.0));
                 let body = app.session.doc.plain_text(StoryRef::Part(c.part));
-                lines.push((painter.layout(body.trim().to_string(), regular(fs), dim(resolved), w - 16.0), 4.0));
+                lines.push((balloon_text(painter, body.trim().to_string(), regular(fs), dim(resolved), w - 16.0), 4.0));
                 for rid in &thread {
                     let Some(r) = app.session.doc.comments.get(rid) else { continue };
-                    lines.push((painter.layout(author_name(&r.author), semibold(fs), t.text, w - 16.0), 9.0));
+                    lines.push((balloon_text(painter, author_name(&r.author), semibold(fs), t.text, w - 16.0), 9.0));
                     let text = app.session.doc.plain_text(StoryRef::Part(r.part));
-                    lines.push((painter.layout(text.trim().to_string(), regular(fs), dim(resolved), w - 16.0), 4.0));
+                    lines.push((balloon_text(painter, text.trim().to_string(), regular(fs), dim(resolved), w - 16.0), 4.0));
                 }
                 let h = lines.iter().map(|(g, gap)| g.size().y + gap).sum::<f32>() + 12.0;
                 Rect::from_min_size(pos2(x0, top), vec2(w, h))
@@ -1762,7 +1905,11 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
             // Leader: from the anchor along the text to the page edge, then to the card.
             let lead = Stroke::new(if selected { 1.5 } else { 1.0 }, color.linear_multiply(if selected { 1.0 } else { 0.7 }));
             if !over_page {
-                dashed(painter, anchor, pos2(pr.max.x, anchor.y), lead);
+                let on_page = Stroke::new(
+                    lead.width,
+                    leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(if selected { 1.0 } else { 0.7 }),
+                );
+                dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                 painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
             }
             let card = if active {
@@ -1816,7 +1963,7 @@ fn author_name(a: &str) -> String {
 fn card_shapes(painter: &egui::Painter, t: &Tokens, card: Rect, color: Color32, selected: bool, slot: Option<egui::layers::ShapeIdx>) {
     let shapes = vec![
         egui::Shape::rect_filled(card.translate(vec2(0.0, 1.0)), 4.0, t.page_shadow),
-        egui::Shape::rect_filled(card, 4.0, if selected { t.checked } else { Color32::WHITE }),
+        egui::Shape::rect_filled(card, 4.0, if selected { t.checked } else { t.balloon }),
         egui::Shape::rect_stroke(card, 4.0, Stroke::new(if selected { 1.5 } else { 1.0 }, color), egui::StrokeKind::Inside),
         egui::Shape::rect_filled(Rect::from_min_size(card.min, vec2(4.0, card.height())), egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }, color),
     ];
@@ -1826,6 +1973,108 @@ fn card_shapes(painter: &egui::Painter, t: &Tokens, card: Rect, color: Color32, 
             painter.extend(shapes);
         }
     }
+}
+
+/// Does `text` hold right-to-left letters (Arabic, Hebrew, Syriac, Thaana, N'Ko …)?
+fn has_rtl(text: &str) -> bool {
+    text.chars().any(|c| matches!(unicode_bidi::bidi_class(c), unicode_bidi::BidiClass::R | unicode_bidi::BidiClass::AL))
+}
+
+/// The row `line` of paragraph `p` of `para` in display order, for egui: the bidi runs left to
+/// right as they are shown, and inside a right-to-left run its words reversed. The letters of each
+/// word stay in logical order, because egui's shaper already runs an Arabic word right to left.
+fn visual_row(info: &unicode_bidi::BidiInfo, p: &unicode_bidi::ParagraphInfo, para: &str, line: std::ops::Range<usize>) -> String {
+    // `visual_runs` indexes the line's first byte: an empty line (an empty last row) would panic.
+    if line.start >= line.end || line.end > p.range.end {
+        return String::new();
+    }
+    let (levels, runs) = info.visual_runs(p, line);
+    let mut out = String::new();
+    for run in runs {
+        let rtl = levels.get(run.start).is_some_and(|l| l.is_rtl());
+        // Runs lie on character boundaries; a missing slice is skipped, never a panic.
+        let Some(piece) = para.get(run) else { continue };
+        if rtl {
+            let mut words: Vec<&str> = piece.split_inclusive(char::is_whitespace).collect();
+            words.reverse();
+            for w in words {
+                // The space that followed a word now goes before it.
+                let word = w.trim_end_matches(char::is_whitespace);
+                out.push_str(w.get(word.len()..).unwrap_or_default());
+                out.extend(word.chars().map(mirrored));
+            }
+        } else {
+            out.push_str(piece);
+        }
+    }
+    out
+}
+
+/// `c` as drawn in a right-to-left run: brackets face the other way (Unicode's Bidi_Mirrored
+/// pairs that interface text uses), since egui draws the character it is given.
+fn mirrored(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '«' => '»',
+        '»' => '«',
+        '‹' => '›',
+        '›' => '‹',
+        _ => c,
+    }
+}
+
+/// A read-only balloon's text, wrapped to `width`. egui joins Arabic letters but places them left
+/// to right, so a right-to-left comment read its words backwards. Each wrapped row is put into
+/// display order (Unicode bidi, per paragraph) and a right-to-left paragraph's rows are set against
+/// the right edge. Text without right-to-left letters is laid out exactly as before.
+fn balloon_text(painter: &egui::Painter, text: String, font: egui::FontId, color: Color32, width: f32) -> std::sync::Arc<egui::Galley> {
+    if !has_rtl(&text) {
+        return painter.layout(text, font, color, width);
+    }
+    let format = egui::TextFormat::simple(font.clone(), color);
+    let mut job = egui::text::LayoutJob::default();
+    let mut rows: Vec<(String, bool)> = Vec::new();
+    for para in text.split('\n') {
+        let info = unicode_bidi::BidiInfo::new(para, None);
+        if info.paragraphs.is_empty() {
+            rows.push((String::new(), false));
+        }
+        for p in &info.paragraphs {
+            let rtl = p.level.is_rtl();
+            // Wrap in logical order at spaces, by the words' widths (the order doesn't change a word's
+            // width), then put each row in display order. egui's own rows can't be used: it draws a
+            // lam-alef pair as one glyph, so its glyph count isn't the character count.
+            let mut start = p.range.start;
+            let mut end = start;
+            let mut used = 0.0;
+            for word in para.get(p.range.clone()).unwrap_or_default().split_inclusive(char::is_whitespace) {
+                let w = painter.layout_no_wrap(word.trim_end().to_string(), font.clone(), color).size().x;
+                let gap = painter.layout_no_wrap(word.get(word.trim_end().len()..).unwrap_or_default().to_string(), font.clone(), color).size().x;
+                if end > start && used + w > width {
+                    rows.push((visual_row(&info, p, para, start..end).trim().to_string(), rtl));
+                    start = end;
+                    used = 0.0;
+                }
+                used += w + gap;
+                end += word.len();
+            }
+            rows.push((visual_row(&info, p, para, start..end).trim().to_string(), rtl));
+        }
+    }
+    let last = rows.len().saturating_sub(1);
+    for (i, (row, rtl)) in rows.into_iter().enumerate() {
+        let lead = if rtl { (width - painter.layout_no_wrap(row.clone(), font.clone(), color).size().x).max(0.0) } else { 0.0 };
+        let row = if i < last { row + "\n" } else { row };
+        job.append(&row, lead, format.clone());
+    }
+    painter.layout_job(job)
 }
 
 /// The selected balloon: the comment and its replies as editable fields (each edit is one undo
@@ -1847,7 +2096,7 @@ fn active_balloon(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, id: u
     child.horizontal(|ui| {
         ui.label(egui::RichText::new(name(app, id)).font(bold.clone()).color(t.text));
         if resolved {
-            ui.label(egui::RichText::new(tl!("Resolved")).font(small.clone()).color(t.green));
+            ui.label(egui::RichText::new(tl!("Resolved")).font(small.clone()).color(t.resolved_text));
         }
     });
     crate::panes::comment_editor(app, &mut child, id, Some(font.clone()), focus && !app.canvas.balloon_reply);
@@ -2053,8 +2302,10 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         None
     };
     if resp.double_clicked() {
-        if let Some((_, header)) = hf_zone
-            && story == StoryRef::Body
+        // Also from another header/footer: with Different First Page on, page 1's header is not
+        // the one being edited on page 2 (#2826).
+        if let Some((shown, header)) = hf_zone
+            && (story == StoryRef::Body || (shown != Some(story) && matches!(part_kind(app, story), Some(PartKind::Header | PartKind::Footer))))
         {
             let id = if header { "insert.editHeader" } else { "insert.editFooter" };
             if app.run(id, json!({ "page": page })).is_ok()
@@ -2265,7 +2516,8 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         && let Some(link) = link_under(app, layout, page, x, y, &pos)
     {
         let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
-        let tip = format!("{link}\n{}", crate::i18n::fmt(tl!("{key}+Click to follow link"), &[("key", key)]));
+        let target = if is_generated_bookmark_link(&link) { tl!("Current Document").to_string() } else { link };
+        let tip = format!("{target}\n{}", crate::i18n::fmt(tl!("{key}+Click to follow link"), &[("key", key)]));
         egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), egui::Id::new("link_tip"), egui::PopupAnchor::Pointer).show(|ui| {
             ui.label(tip);
         });
@@ -2276,9 +2528,11 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
 fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layout: &DocLayout, scale: f32) {
     let t = Tokens::get(ui.ctx());
     let p = ui.painter();
-    p.rect_filled(Rect::from_min_max(pos2(v.min.x, h.min.y), pos2(v.max.x, h.max.y)), 0.0, t.canvas);
+    let corner = Rect::from_min_max(pos2(v.min.x, h.min.y), pos2(v.max.x, h.max.y));
+    p.rect_filled(corner, 0.0, t.canvas);
     p.rect_filled(h, 0.0, t.canvas);
     p.rect_filled(v, 0.0, t.canvas);
+    crate::ruler_tabs::selector(app, ui, corner);
     let pi = app.session.page_hint.min(layout.pages.len().saturating_sub(1));
     let (Some(page), Some(pr)) = (layout.pages.get(pi), rects.get(pi)) else { return };
     let scale = page_screen_scale(*pr, page, scale);
@@ -2321,9 +2575,6 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
     ] {
         margin_handle(app, ui, edge, zone, |p| (p.x - x0) / scale, &sect);
     }
-    // In a table, its column borders; registered before the indent markers, which keep the
-    // pointer where they overlap.
-    crate::table_ruler::columns(app, ui, layout, pi, bar, x0, scale);
     // Indent markers for the caret's paragraph (relative to its column, or in a table to the
     // cell's text).
     let (col_x, w) = crate::table_ruler::text_area(app, layout, pi).unwrap_or((page.body.x, page.body.w));
@@ -2360,23 +2611,18 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
             t.ruler,
             Stroke::new(1.0, c),
         ));
-        let mut open_tabs = false;
-        for (i, tab) in rp.tabs.iter().enumerate() {
-            let tx = px(tab.pos);
-            let foot = if rtl { -4.0 } else { 4.0 };
-            hp.line_segment([pos2(tx, bar.max.y - 6.0), pos2(tx, bar.max.y - 1.0)], Stroke::new(1.5, t.text));
-            hp.line_segment([pos2(tx, bar.max.y - 1.0), pos2(tx + foot, bar.max.y - 1.0)], Stroke::new(1.5, t.text));
-            // Double-clicking a tab marker opens the Tabs dialog (#320).
-            let zone = Rect::from_center_size(pos2(tx, bar.max.y - 4.0), vec2(8.0, 9.0));
-            open_tabs |= ui.interact(zone, ui.id().with(("ruler_tab", i)), Sense::click()).double_clicked();
-        }
-        if open_tabs {
-            let _ = app.run("para.tabs", json!({}));
-        }
+        // Tab stops: drawn and registered before the indent markers' drags, which win where they overlap.
+        let step = unit / div as f32 / 2.0;
+        let ruler = crate::ruler_tabs::Ruler { bar, text, width: w, step, rtl, x_of: &px, dist_at: &dist_at };
+        crate::ruler_tabs::stops(app, ui, &hp, &ruler, &rp.tabs);
+        // In a table, its column borders: registered after the tab stops (whose set-a-stop zone
+        // spans the text area, so a border marker keeps its drag) and before the indent markers,
+        // which keep the pointer where they overlap.
+        crate::table_ruler::columns(app, ui, layout, pi, bar, x0, scale);
         // Dragging the left-indent marker.
         let id = ui.id().with("ruler_left");
         let mr = Rect::from_center_size(pos2(left, bar.max.y - 3.0), vec2(12.0, 12.0));
-        let r = ui.interact(mr, id, Sense::drag());
+        let r = ui.interact(mr, id, Sense::click_and_drag());
         if r.dragged()
             && let Some(pp) = r.interact_pointer_pos()
         {
@@ -2388,7 +2634,7 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
             let _ = app.run("para.indents", json!({"left": snapped}));
         }
         let fr = Rect::from_center_size(pos2(first, bar.min.y + 3.0), vec2(12.0, 10.0));
-        let r = ui.interact(fr, ui.id().with("ruler_first"), Sense::drag());
+        let r = ui.interact(fr, ui.id().with("ruler_first"), Sense::click_and_drag());
         if r.dragged()
             && let Some(pp) = r.interact_pointer_pos()
         {
@@ -2399,7 +2645,7 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
             let _ = app.run("para.indents", json!({"firstLine": (pt / 4.5).round() * 4.5}));
         }
         let rr = Rect::from_center_size(pos2(right, bar.max.y - 3.0), vec2(12.0, 12.0));
-        let r = ui.interact(rr, ui.id().with("ruler_right"), Sense::drag());
+        let r = ui.interact(rr, ui.id().with("ruler_right"), Sense::click_and_drag());
         if r.dragged()
             && let Some(pp) = r.interact_pointer_pos()
         {
@@ -2766,6 +3012,7 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         // The TOC field sits in the table's heading; its entries are plain paragraphs.
         ui.separator();
         item(ui, app, tl!("Update Field"), "references.updateToc", json!({}));
+        item(ui, app, tl!("Remove Table of Contents"), "references.removeToc", json!({}));
     }
     let selected_object = wordcraft_engine::cmd::objects::selected(&app.session).is_some();
     if selected_object || app.session.sel.focus.path.cell().is_some() {
@@ -2944,6 +3191,12 @@ fn link_under(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32, po
     })
 }
 
+/// A link to a hidden bookmark (`#_Toc…`, `#_Ref…`): a name the program made, which nobody
+/// chose or sees, so the hover tip says where it goes instead of showing it (#2177).
+fn is_generated_bookmark_link(link: &str) -> bool {
+    link.strip_prefix("#_").is_some()
+}
+
 /// Whether Ctrl/⌘+click may hand a document's hyperlink to the system: web and email links only,
 /// so a document can't launch `file:` paths, programs or custom-scheme handlers.
 fn is_followable_link(url: &str) -> bool {
@@ -2955,9 +3208,37 @@ mod tests {
     use super::*;
     use crate::table_resize::tests::{H, cell, screen, steps, table_window};
 
+    /// A window-following layout size (#1876, Read Mode): applied at once on entry or when forced,
+    /// held while the window is dragged, applied once the size has been still for the settle time.
+    #[test]
+    fn settle_waits_for_a_drag_to_stop() {
+        let mut s = Settle::default();
+        assert!(s.entering());
+        assert!(s.apply(vec2(1400.0, 700.0), 1.0, true, false), "entering applies at once");
+        assert!(!s.apply(vec2(1400.0, 700.0), 1.01, false, false), "nothing changed");
+        assert!(!s.apply(vec2(1300.0, 700.0), 1.02, true, false), "a drag frame waits");
+        assert!(!s.apply(vec2(1200.0, 700.0), 1.10, true, false), "still dragging");
+        assert!(!s.apply(vec2(1200.0, 700.0), 1.20, true, false), "not settled yet");
+        assert!(s.apply(vec2(1200.0, 700.0), 1.11 + RESIZE_SETTLE, true, false), "settled");
+        assert!(s.apply(vec2(1100.0, 700.0), 2.0, true, true), "forced applies mid-drag");
+        assert!(s.apply(vec2(1100.0, 700.0), 5.0, true, false), "a zoom with a still window applies now");
+        s.leave();
+        assert!(s.entering());
+    }
+
     /// What `page_image` replaced: the raster un-premultiplied, for egui to premultiply again.
     fn by_straight_alpha(img: &wordcraft_render::Rendered) -> egui::ColorImage {
         egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &img.to_straight())
+    }
+
+    /// #2177: only a link to a program-made hidden bookmark hides its name in the hover tip.
+    #[test]
+    fn hover_tip_hides_generated_bookmark_names_only() {
+        assert!(is_generated_bookmark_link("#_Toc123456"));
+        assert!(is_generated_bookmark_link("#_Ref42"));
+        assert!(!is_generated_bookmark_link("#Chapter1"));
+        assert!(!is_generated_bookmark_link("https://example.com/_x"));
+        assert!(!is_generated_bookmark_link(""));
     }
 
     #[test]
@@ -2989,6 +3270,105 @@ mod tests {
         assert!(wheel_hovered(true, true, true), "wheel keeps scrolling during a drag-select");
         assert!(!wheel_hovered(true, true, false), "another widget's drag still owns the wheel");
         assert!(!wheel_hovered(false, true, true));
+    }
+
+    /// #1772: the page-turn bar at the bottom right covered the last lines of the column under it.
+    #[test]
+    fn reading_columns_end_above_the_page_turn_bar() {
+        let scale = PX_PER_PT;
+        for (w, h) in [(1280.0, 740.0), (900.0, 700.0), (2000.0, 1200.0)] {
+            for requested in [None, Some(180.0), Some(350.0), Some(612.0)] {
+                let (_, ph) = reading_size(vec2(w, h), scale, requested);
+                let bottom = GAP + ph * scale;
+                assert!(bottom <= h - READ_NAV_BAR + 0.5, "{w}×{h} {requested:?}: column ends at {bottom}, bar starts at {}", h - READ_NAV_BAR);
+            }
+        }
+    }
+
+    /// #1772: a chosen column width (or a resized window) left the last visible column cut off at
+    /// the right edge. The reading viewport shows only whole columns, centred.
+    #[test]
+    fn reading_viewport_shows_whole_columns() {
+        let scale = PX_PER_PT;
+        for (w, h) in [(1280.0, 740.0), (900.0, 700.0), (1440.0, 820.0), (500.0, 600.0)] {
+            let full = Rect::from_min_size(pos2(10.0, 20.0), vec2(w, h));
+            for requested in [None, Some(180.0), Some(240.0), Some(350.0), Some(612.0)] {
+                for zoom in [0.75, 1.0, 1.5] {
+                    let (cw, _) = reading_size(full.size(), scale * zoom, requested);
+                    let column = cw * scale * zoom;
+                    let area = reading_viewport(full, column, scale * zoom);
+                    assert!(full.contains_rect(area), "inside the canvas");
+                    assert_eq!(area.height(), full.height());
+                    assert!((area.center().x - full.center().x).abs() < 0.5, "centred");
+                    // Columns at rest start at GAP + k·step from the viewport's left edge. Past
+                    // the whole ones, only a column short by under half a point each may show.
+                    let step = column + GAP;
+                    let whole = ((area.width() - GAP) / step + 1e-3).floor().max(1.0);
+                    let used = whole * step + GAP;
+                    let short = used + step - area.width();
+                    assert!(
+                        area.width() <= used + 0.5 || whole == 1.0 || short <= (whole + 1.0) * 0.5 * scale * zoom + 0.5,
+                        "{w}×{h} {requested:?} {zoom}: {} wide shows a cut column (columns use {used})",
+                        area.width()
+                    );
+                }
+            }
+        }
+        // With no width chosen the columns are sized to fill the canvas exactly, so none may be
+        // dropped: the stored width (pt) and back to px must still fit every one of them.
+        for zoom in [0.75, 1.0, 1.25, 1.5] {
+            let scale = PX_PER_PT * zoom;
+            for w in (300..=4000).step_by(7) {
+                let full = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, 700.0));
+                let count = (full.width() / 295.0).round().clamp(1.0, 5.0);
+                let px = (full.width() - (count + 1.0) * GAP) / count;
+                if px < 192.0 {
+                    continue; // the minimum width overflows; whole columns then shrink the view
+                }
+                let (cw, _) = reading_size(full.size(), scale, None);
+                let column = cw * scale;
+                let area = reading_viewport(full, column, scale);
+                let needed = count * column + (count + 1.0) * GAP;
+                assert!(area.width() >= needed - 0.5, "{w} at {zoom}: {} wide drops a column of {count} ({needed})", area.width());
+            }
+        }
+        // Junk sizes never panic and fall back to the whole canvas.
+        let full = Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 600.0));
+        assert_eq!(reading_viewport(full, f32::NAN, 1.0), full);
+        assert_eq!(reading_viewport(full, 0.0, f32::NAN), full);
+    }
+
+    #[test]
+    fn reading_viewport_keeps_columns_when_the_window_shrinks_a_little() {
+        // The column width is only re-laid out when it changes by more than half a point, so a
+        // window a few pixels narrower keeps slightly too wide columns: none may drop out.
+        for (zoom, shrink) in [(1.0, 1.0), (1.0, 3.0), (1.5, 1.0), (1.5, 3.0), (0.75, 1.0)] {
+            let scale = PX_PER_PT * zoom;
+            for w in (300..=4000).step_by(7) {
+                let before = vec2(w as f32, 700.0);
+                let count = (before.x / 295.0).round().clamp(1.0, 5.0);
+                if (before.x - (count + 1.0) * GAP) / count < 192.0 {
+                    continue;
+                }
+                let after = before - vec2(shrink, 0.0);
+                if (after.x / 295.0).round() != count {
+                    continue; // a different column count reflows anyway
+                }
+                let (kept, _) = reading_size(before, scale, None);
+                let (fresh, _) = reading_size(after, scale, None);
+                if (kept - fresh).abs() > 0.5 {
+                    continue; // re-laid out at once
+                }
+                let full = Rect::from_min_size(pos2(0.0, 0.0), after);
+                let area = reading_viewport(full, kept * scale, scale);
+                assert!(
+                    area.width() >= full.width() - 0.5,
+                    "{w}-{shrink} at {zoom}: kept {kept}pt columns, view narrowed to {} of {}",
+                    area.width(),
+                    full.width()
+                );
+            }
+        }
     }
 
     #[test]
@@ -3449,6 +3829,71 @@ mod tests {
 
     /// #167: a comment balloon edits in place like Word's: click it, type, leave it, and the
     /// comment has the new text as one undo step.
+    /// Lays `text` out as a read-only balloon does, with a document face that covers Arabic, and
+    /// returns each glyph's character and left edge.
+    fn balloon_glyphs(text: &str, width: f32) -> Option<Vec<(char, f32)>> {
+        let face = wordcraft_fonts::FontDb::global().fallback_for('ش', u32::MAX)?;
+        let ctx = egui::Context::default();
+        let mut fonts = crate::theme::font_definitions(false, false);
+        crate::theme::add_fallback_faces(&mut fonts, &[face]);
+        ctx.set_fonts(fonts);
+        ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
+        let mut out = Vec::new();
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            let g = balloon_text(ui.painter(), text.to_string(), egui::FontId::proportional(14.0), Color32::BLACK, width);
+            for r in &g.rows {
+                out.extend(r.row.glyphs.iter().map(|gl| (gl.chr, r.pos.x + gl.pos.x)));
+            }
+        })
+        .drop_without_applying_deltas();
+        Some(out)
+    }
+
+    /// Where egui draws a right-to-left balloon's words, measured: the first word on the right.
+    #[test]
+    fn a_right_to_left_balloon_reads_from_the_right() {
+        let x = |g: &[(char, f32)], c: char| g.iter().find(|(ch, _)| *ch == c).map(|(_, x)| *x).unwrap();
+        let Some(g) = balloon_glyphs("شركة اي", 400.0) else { return };
+        assert!(x(&g, 'ش') > x(&g, 'ي'), "the first word is right of the second: {g:?}");
+        assert!(x(&g, 'ش') > 300.0, "the line is set against the right edge: {g:?}");
+        // A Latin word inside keeps its letters left to right; its brackets face it.
+        let g = balloon_glyphs("الربط (APIs) هنا", 400.0).unwrap();
+        assert!(x(&g, 'A') < x(&g, 's'));
+        assert!(x(&g, 'ط') > x(&g, 'A') && x(&g, 'A') > x(&g, 'ه'), "{g:?}");
+        // The opening bracket, on the right in Arabic, is drawn mirrored: `(APIs)` on screen.
+        assert!(x(&g, '(') < x(&g, 'A') && x(&g, ')') > x(&g, 's'), "brackets face the word: {g:?}");
+        // A paragraph that starts in Latin runs left to right.
+        let g = balloon_glyphs("@Ahmed برجاء مراجعة", 400.0).unwrap();
+        assert!(x(&g, '@') < x(&g, 'ب') && x(&g, '@') < 50.0, "{g:?}");
+        assert!(x(&g, 'ب') > x(&g, 'م'), "the Arabic words still read from the right: {g:?}");
+        // Wrapped rows stay inside the width.
+        let long = "بيان الأنظمة المطلوب ربطها ومتطلبات التكامل وواجهات الربط البرمجي وآلية تبادل البيانات";
+        let g = balloon_glyphs(long, 200.0).unwrap();
+        assert!(g.iter().all(|(_, x)| *x <= 200.0), "{g:?}");
+    }
+
+    #[test]
+    fn balloon_rows_put_right_to_left_words_in_display_order() {
+        let row = |text: &str| {
+            let info = unicode_bidi::BidiInfo::new(text, None);
+            let p = info.paragraphs.first().unwrap();
+            visual_row(&info, p, text, p.range.clone())
+        };
+        // Words swap, each word's letters stay as they are (egui shapes the word).
+        assert_eq!(row("شركة اي للكهرباء"), "للكهرباء اي شركة");
+        // A Latin name and a number inside Arabic keep their own order.
+        assert_eq!(row("يجب ربط Odoo 19 هنا"), "هنا Odoo 19 ربط يجب");
+        assert_eq!(row("Should include Meters system API"), "Should include Meters system API");
+        assert!(!has_rtl("Should include Meters system API"));
+        assert!(has_rtl("נא לבדוק"));
+        // An empty row at the end of the text (egui's last row after a wrap) is empty, not a panic.
+        let text = "شركة اي";
+        let info = unicode_bidi::BidiInfo::new(text, None);
+        let p = info.paragraphs.first().unwrap();
+        assert_eq!(visual_row(&info, p, text, text.len()..text.len()), "");
+        assert_eq!(visual_row(&info, p, text, 0..text.len() + 5), "");
+    }
+
     #[test]
     fn a_balloon_edits_its_comment() {
         let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
@@ -3566,6 +4011,49 @@ mod tests {
         assert_eq!(h.state().session.doc.plain_text(footer), "Page foot");
     }
 
+    /// #2826: editing the default header, then turning on Different First Page: a double-click in
+    /// page 1's top margin goes into page 1's own (new) header, and typing lands there.
+    #[test]
+    fn double_click_reaches_the_first_page_header_from_another_header() {
+        use egui::{Event, PointerButton};
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("text.insert", json!({"text": "Body text"})).unwrap();
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        a.run("insert.header", json!({"text": "Head"})).unwrap();
+        let head = a.session.sel.focus.story;
+        a.run("layout.differentFirstPage", json!({"value": true})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 2200.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let page = h.state_mut().session.layout().pages[0].clone();
+        assert!(page.header_story.is_none());
+        let at = page_to_screen(h.state_mut(), 0, page.body.x + 20.0, page.body.y / 2.0).expect("top margin on screen");
+        h.event(Event::PointerMoved(at));
+        for _ in 0..2 {
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Default::default() });
+            h.step();
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Default::default() });
+            h.step();
+        }
+        let first = h.state().session.sel.focus.story;
+        assert_eq!(part_kind(h.state(), first), Some(PartKind::Header));
+        assert_ne!(first, head, "page 1's own header, not the default one");
+        h.event(Event::Text("Cover".into()));
+        for _ in 0..3 {
+            h.step();
+        }
+        assert_eq!(h.state().session.doc.plain_text(first), "Cover");
+        assert_eq!(h.state_mut().session.layout().pages[0].header_story.map(StoryRef::Part), Some(first));
+    }
+
     /// #513: right-clicking a picture selects it and offers Wrap Text, as in Word; choosing
     /// Square there wraps text around it.
     #[test]
@@ -3654,6 +4142,41 @@ mod tests {
         }
         let text = h.state().session.doc.plain_text(StoryRef::Body);
         assert_eq!(text.matches("Fresh heading").count(), 2, "the new heading is listed in the table: {text}");
+    }
+
+    /// #2179: the context menu on a table of contents entry also offers Remove Table of Contents.
+    #[test]
+    fn context_menu_on_a_toc_entry_removes_the_table() {
+        use egui_kittest::kittest::Queryable;
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::sample::report()), Default::default());
+        a.run("caret.docStart", json!({})).unwrap();
+        a.run("references.toc", json!({})).unwrap();
+        let is_entry = |b: &wordcraft_doc::Block| b.as_para().is_some_and(|p| p.props.style.as_deref() == Some("TOC1"));
+        let entry = a.session.doc.body.iter().position(|b| is_entry(b)).expect("a TOC entry");
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let c = h.state_mut().session.layout().caret(&Pos::body(entry, 2)).expect("the entry is laid out");
+        let at = page_to_screen(h.state_mut(), c.page, c.x + 1.0, c.top + c.height / 2.0).expect("on screen");
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Default::default() });
+            h.step();
+        }
+        h.step();
+        h.get_by_label_contains("Remove Table of Contents").click();
+        for _ in 0..3 {
+            h.step();
+        }
+        assert!(!h.state().session.doc.body.iter().any(|b| is_entry(b)), "the table is gone");
     }
 
     /// #996: on macOS a Control-click is the right-click (the trackpad's and the one-button
@@ -4345,6 +4868,200 @@ mod tests {
         assert!(after1 > centre && after1 > after2, "right to left: the numbers rise away from the right margin");
         assert!((after1 - (2.0 * centre - before1)).abs() < 1.0, "1 mirrors about the page centre: {before1} → {after1}");
         assert!((after2 - (2.0 * centre - before2)).abs() < 1.0, "2 mirrors about the page centre: {before2} → {after2}");
+    }
+
+    /// Ruler tab gestures are safe: a click on an indent marker places nothing, only the
+    /// primary button places or moves stops, Escape cancels a drag, and a drag whose paragraph
+    /// the caret leaves is abandoned instead of applied there.
+    #[test]
+    fn ruler_tab_gestures_are_primary_only_and_cancellable() {
+        use egui::{Event, Key, PointerButton};
+        use wordcraft_doc::props::TabAlign;
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("text.insert", json!({"text": "Name\tScore\rSecond"})).unwrap();
+        a.run("view.ruler", json!({"value": true})).unwrap();
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let area = h.state().canvas.canvas_rect.expect("the canvas is laid out");
+        let ruler_x = |h: &mut egui_kittest::Harness<'_, WordApp>, d: f32| {
+            let body_x = h.state_mut().session.layout().pages[0].body.x;
+            page_to_screen(h.state_mut(), 0, body_x + d, 0.0).expect("on screen").x
+        };
+        let on_ruler = |h: &mut egui_kittest::Harness<'_, WordApp>, d: f32| pos2(ruler_x(h, d), area.min.y - 7.0);
+        let button = |at: Pos2, b: PointerButton, pressed: bool| Event::PointerButton { pos: at, button: b, pressed, modifiers: Default::default() };
+        let drag_events = |h: &mut egui_kittest::Harness<'_, WordApp>, from: Pos2, to: Pos2, b: PointerButton| {
+            h.event(Event::PointerMoved(from));
+            h.event(button(from, b, true));
+            h.step();
+            for k in 1..=4 {
+                h.event(Event::PointerMoved(from + (to - from) * (k as f32 / 4.0)));
+                h.step();
+            }
+            h.event(button(to, b, false));
+            for _ in 0..3 {
+                h.step();
+            }
+        };
+        let stops_of = |h: &egui_kittest::Harness<'_, WordApp>, block: usize| {
+            let s = &h.state().session;
+            let para = s.doc.para_at(&Pos::body(block, 0)).expect("a paragraph");
+            s.doc.styles.resolve_para(&para.props).tabs.iter().map(|t| (t.pos, t.align)).collect::<Vec<_>>()
+        };
+
+        // A plain click on the left-indent marker (at the paragraph's start edge) places nothing.
+        let marker = pos2(ruler_x(&mut h, 0.0), area.min.y - 6.0);
+        h.event(Event::PointerMoved(marker));
+        h.event(button(marker, PointerButton::Primary, true));
+        h.step();
+        h.event(button(marker, PointerButton::Primary, false));
+        for _ in 0..3 {
+            h.step();
+        }
+        assert!(stops_of(&h, 1).is_empty(), "an indent-marker click placed a stop: {:?}", stops_of(&h, 1));
+
+        // A right-button drag across the ruler places nothing.
+        let (from, to) = (on_ruler(&mut h, 72.0), on_ruler(&mut h, 144.0));
+        drag_events(&mut h, from, to, PointerButton::Secondary);
+        assert!(stops_of(&h, 1).is_empty(), "a right-drag placed a stop: {:?}", stops_of(&h, 1));
+
+        // Set a stop at 2" the intended way, then prove Escape cancels a move.
+        let at = on_ruler(&mut h, 144.0);
+        h.event(Event::PointerMoved(at));
+        h.event(button(at, PointerButton::Primary, true));
+        h.step();
+        h.event(button(at, PointerButton::Primary, false));
+        for _ in 0..32 {
+            h.step();
+        }
+        assert_eq!(stops_of(&h, 1), vec![(144.0, TabAlign::Left)]);
+        let (from, to) = (on_ruler(&mut h, 144.0), on_ruler(&mut h, 216.0));
+        h.event(Event::PointerMoved(from));
+        h.event(button(from, PointerButton::Primary, true));
+        h.step();
+        h.event(Event::PointerMoved(from + (to - from) * 0.5));
+        h.step();
+        h.event(Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() });
+        h.step();
+        h.event(button(to, PointerButton::Primary, false));
+        for _ in 0..32 {
+            h.step();
+        }
+        assert_eq!(stops_of(&h, 1), vec![(144.0, TabAlign::Left)], "Escape left the stop where it was");
+
+        // A drag abandoned by moving the caret to another paragraph applies nowhere.
+        let (from, to) = (on_ruler(&mut h, 144.0), on_ruler(&mut h, 216.0));
+        h.event(Event::PointerMoved(from));
+        h.event(button(from, PointerButton::Primary, true));
+        h.step();
+        h.event(Event::PointerMoved(from + (to - from) * 0.5));
+        h.step();
+        h.state_mut().run("caret.docStart", json!({})).unwrap();
+        h.step();
+        h.event(button(to, PointerButton::Primary, false));
+        for _ in 0..3 {
+            h.step();
+        }
+        assert_eq!(stops_of(&h, 1), vec![(144.0, TabAlign::Left)], "the old paragraph keeps its stop");
+        assert!(stops_of(&h, 0).is_empty(), "the caret's new paragraph gained nothing: {:?}", stops_of(&h, 0));
+    }
+
+    /// Tab stops on the ruler: the corner selector picks the kind, a click sets a stop, dragging
+    /// moves it, dragging it off clears it, and each gesture is one undo step.
+    #[test]
+    fn ruler_tab_stops_are_set_moved_and_cleared_with_the_pointer() {
+        use egui::{Event, PointerButton};
+        use wordcraft_doc::props::TabAlign;
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("text.insert", json!({"text": "Name\tScore"})).unwrap();
+        a.run("view.ruler", json!({"value": true})).unwrap();
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let area = h.state().canvas.canvas_rect.expect("the canvas is laid out");
+        // The middle of the ruler's strip, over a point `d` points from the paragraph's start.
+        let on_ruler = |h: &mut egui_kittest::Harness<'_, WordApp>, d: f32| {
+            let body_x = h.state_mut().session.layout().pages[0].body.x;
+            let x = page_to_screen(h.state_mut(), 0, body_x + d, 0.0).expect("on screen").x;
+            pos2(x, area.min.y - 7.0)
+        };
+        let button =
+            |at: Pos2, pressed: bool| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        let click = |h: &mut egui_kittest::Harness<'_, WordApp>, at: Pos2| {
+            h.event(Event::PointerMoved(at));
+            h.event(button(at, true));
+            h.step();
+            h.event(button(at, false));
+            for _ in 0..3 {
+                h.step();
+            }
+            // Let the double-click time pass before the next press.
+            for _ in 0..30 {
+                h.step();
+            }
+        };
+        let drag = |h: &mut egui_kittest::Harness<'_, WordApp>, from: Pos2, to: Pos2| {
+            h.event(Event::PointerMoved(from));
+            h.event(button(from, true));
+            h.step();
+            for k in 1..=6 {
+                h.event(Event::PointerMoved(from + (to - from) * (k as f32 / 6.0)));
+                h.step();
+            }
+            h.event(button(to, false));
+            for _ in 0..3 {
+                h.step();
+            }
+        };
+        let stops = |h: &egui_kittest::Harness<'_, WordApp>| {
+            let s = &h.state().session;
+            let para = s.doc.para_at(&s.sel.focus).expect("a paragraph");
+            s.doc.styles.resolve_para(&para.props).tabs.iter().map(|t| (t.pos, t.align)).collect::<Vec<_>>()
+        };
+
+        // The selector starts at Left; a click moves it to Center.
+        assert_eq!(h.state().canvas.tab_kind, TabAlign::Left);
+        click(&mut h, pos2(area.min.x - RULER / 2.0, area.min.y - RULER / 2.0));
+        assert_eq!(h.state().canvas.tab_kind, TabAlign::Center);
+
+        // A click on the ruler sets a centre stop at 2 inches (on the 1/16 inch grid).
+        let at = on_ruler(&mut h, 144.0);
+        click(&mut h, at);
+        assert_eq!(stops(&h), vec![(144.0, TabAlign::Center)]);
+
+        // Dragging it to 3 inches moves it, keeping its kind.
+        let (from, to) = (on_ruler(&mut h, 144.0), on_ruler(&mut h, 216.0));
+        drag(&mut h, from, to);
+        assert_eq!(stops(&h), vec![(216.0, TabAlign::Center)]);
+
+        // Dragging it down into the page clears it.
+        let from = on_ruler(&mut h, 216.0);
+        drag(&mut h, from, from + vec2(0.0, 80.0));
+        assert!(stops(&h).is_empty(), "the stop came off: {:?}", stops(&h));
+
+        // Each gesture was one step: undo brings back the moved stop, then the first one.
+        assert!(h.state_mut().session.undo());
+        assert_eq!(stops(&h), vec![(216.0, TabAlign::Center)]);
+        assert!(h.state_mut().session.undo());
+        assert_eq!(stops(&h), vec![(144.0, TabAlign::Center)]);
     }
 
     #[test]

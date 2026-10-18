@@ -440,10 +440,14 @@
 	Modify Style	Stílus módosítása
 	Modify…	Módosítás…
 	Multilevel List	Többszintű lista
+	Multilevel List Library	Többszintű listák tára
+	Article I.	I. cikk
+	Chapter 1	1. fejezet
+	Section 1.01	1.01. szakasz
 	Multiple Pages	Több oldal
 	Name (A–Z)	Név (A–Z)
 	Name:	Név:
-	Narrow  0.5" all	Keskeny  0,5" mindenhol
+	Narrow  {size} all	Keskeny  {size} mindenhol
 	Navigation	Navigáció
 	Navigation Pane	Navigációs panel
 	New	Új
@@ -472,7 +476,7 @@
 	Nonbreaking Space	Nem törő szóköz
 	None	Nincs
 	Normal	Normál
-	Normal  1" all	Normál  1" mindenhol
+	Normal  {size} all	Normál  {size} mindenhol
 	Normal Indent	Normál behúzás
 	Normal Style	Normál stílus
 	Normal Table	Normál táblázat
@@ -1642,6 +1646,7 @@
 	Apply to:	Alkalmazás erre:
 	Whole document	Teljes dokumentum
 	This section	Ez a szakasz
+	Selected text	Kijelölt szöveg
 	Fill	Kitöltés
 	Setting:	Beállítás:
 	3-D	Térhatású
@@ -1863,6 +1868,8 @@
 	Math AutoCorrect	Matematikai automatikus javítás
 	More >>	Több >>
 	Moves	Áthelyezések
+	Moved from:	Áthelyezve innen:
+	Moved to:	Áthelyezve ide:
 	New document	Új dokumentum
 	No changes (read only)	Nincs módosítás (csak olvasható)
 	Only allow this kind of editing:	Csak ez a fajta szerkesztés engedélyezett:
@@ -2202,6 +2209,7 @@
 	Hyphenation zone:	Elválasztási zóna:
 	Italian	Olasz
 	Croatian	Horvát
+	Indonesian	Indonéz
 	Japanese	Japán
 	Korean	Koreai
 	Limit consecutive hyphens to:	Egymást követő elválasztások legfeljebb:
@@ -2461,6 +2469,16 @@
 	Reading Column Width	Olvasási oszlopszélesség
 	Reading Line Spacing	Olvasási sorköz
 	Reading Text Size	Olvasási szövegméret
+	Odd Banded Rows	Páratlan sávos sorok
+	Even Banded Rows	Páros sávos sorok
+	Odd Banded Columns	Páratlan sávos oszlopok
+	Even Banded Columns	Páros sávos oszlopok
+	Top Left Cell	Bal felső cella
+	Top Right Cell	Jobb felső cella
+	Bottom Left Cell	Bal alsó cella
+	Bottom Right Cell	Jobb alsó cella
+	Inside Horizontal Border	Belső vízszintes szegély
+	Inside Vertical Border	Belső függőleges szegély
 	Filter Recipients	Címzettek szűrése
 	Sort Recipients	Címzettek rendezése
 	Filter and Sort	Szűrés és rendezés
@@ -2607,3 +2625,30 @@
 	Existing File or Web Page	Létező fájl vagy weblap
 	Link to:	Hivatkozás helye:
 	Place in This Document	Dokumentumon belüli hely
+# Table Layout › Sort dialog (#1205)
+	Column {n}	{n}. oszlop
+	Header row	Fejlécsor
+	No header row	Nincs fejlécsor
+	My list has	A listám tartalmaz
+# Table Layout › Formula dialog (#1210)
+	Formula:	Képlet:
+	Paste function:	Függvény beillesztése:
+# Reading Mode column widths (#1040)
+	Narrow	Keskeny
+	Medium	Közepes
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Cellák egyesítése felosztás előtt
+	Table size	Táblázat mérete
+	AutoFit behavior	Automatikus igazítás
+	Initial column width:	Kezdeti oszlopszélesség:
+	AutoFit to contents	Igazítás a tartalomhoz
+	AutoFit to window	Igazítás az ablakhoz
+	Separate text at	Szöveg elválasztása
+	Commas	Vesszők
+	Other:	Egyéb:
+	The number must be between 1 and {max}.	A számnak 1 és {max} között kell lennie.
+	The measurement must be between {min} and {max}.	A méretnek {min} és {max} között kell lennie.
+	Recently Used Fonts	Legutóbb használt betűtípusok
+	All Fonts	Összes betűtípus
+	Spike	Gyűjtő
+	Insert Spike	Beszúrás a gyűjtőből

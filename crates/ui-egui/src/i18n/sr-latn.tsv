@@ -270,6 +270,7 @@
 	Use the Insert key to switch overtype on and off	Taster Insert uključuje i isključuje prepisivanje
 	Whole document	Ceo dokument
 	This section	Ovaj odeljak
+	Selected text	Izabrani tekst
 	Fill	Ispuna
 	Setting:	Vrsta:
 	3-D	3D
@@ -615,10 +616,14 @@
 	Modify…	Izmeni…
 	Move or Resize	Pomeri ili promeni veličinu
 	Multilevel List	Višenivoska lista
+	Multilevel List Library	Biblioteka višenivoskih lista
+	Article I.	Član I.
+	Chapter 1	Poglavlje 1
+	Section 1.01	Odeljak 1.01
 	Multiple Pages	Više strana
 	Name (A–Z)	Naziv (A–Š)
 	Name:	Naziv:
-	Narrow  0.5" all	Uske  0,5" svuda
+	Narrow  {size} all	Uske  {size} svuda
 	Navigation	Navigacija
 	Navigation Pane	Okno za navigaciju
 	New	Novo
@@ -645,7 +650,7 @@
 	Nonbreaking Hyphen	Nedeljiva crtica
 	Nonbreaking Space	Nedeljivi razmak
 	None	Nijedno
-	Normal  1" all	Normalne  1" svuda
+	Normal  {size} all	Normalne  {size} svuda
 	Normal Style	Normalan stil
 	Not available right now	Trenutno nedostupno
 	Not saved	Nije sačuvano
@@ -1493,6 +1498,8 @@
 	Math AutoCorrect	Automatska ispravka matematike
 	More >>	Više >>
 	Moves	Premeštanja
+	Moved from:	Premešteno odavde:
+	Moved to:	Premešteno ovde:
 	New document	Novi dokument
 	No changes (read only)	Bez izmena (samo za čitanje)
 	Only allow this kind of editing:	Dozvoli samo ovu vrstu uređivanja:
@@ -2055,6 +2062,7 @@
 	Hyphenation zone:	Zona deljenja reči:
 	Italian	Italijanski
 	Croatian	Hrvatski
+	Indonesian	Indonežanski
 	Japanese	Japanski
 	Korean	Korejski
 	Limit consecutive hyphens to:	Najviše uzastopnih crtica:
@@ -2101,6 +2109,16 @@
 	AutoFit Column by Double-Clicking	Automatsko uklapanje kolone dvostrukim klikom
 	Region:	Region:
 	Automatic ({region})	Automatski ({region})
+	Odd Banded Rows	Neparni trakasti redovi
+	Even Banded Rows	Parni trakasti redovi
+	Odd Banded Columns	Neparne trakaste kolone
+	Even Banded Columns	Parne trakaste kolone
+	Top Left Cell	Gornja leva ćelija
+	Top Right Cell	Gornja desna ćelija
+	Bottom Left Cell	Donja leva ćelija
+	Bottom Right Cell	Donja desna ćelija
+	Inside Horizontal Border	Unutrašnja horizontalna ivica
+	Inside Vertical Border	Unutrašnja vertikalna ivica
 	Text of the nearest paragraph with a given style (running headers)	Tekst najbližeg pasusa sa zadatim stilom (tekuća zaglavlja)
 	Style name:	Naziv stila:
 # Mail merge: filter and sort recipients (#778)
@@ -2222,3 +2240,30 @@
 	Existing File or Web Page	Postojeća datoteka ili veb stranica
 	Link to:	Veza ka:
 	Place in This Document	Mesto u ovom dokumentu
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Kolona {n}
+	Header row	Red zaglavlja
+	No header row	Bez reda zaglavlja
+	My list has	Moja lista ima
+# Table Layout › Formula dialog (#1210)
+	Formula:	Formula:
+	Paste function:	Nalepi funkciju:
+# Reading Mode column widths (#1040)
+	Narrow	Uska
+	Medium	Srednja
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Spoji ćelije pre deljenja
+	Table size	Veličina tabele
+	AutoFit behavior	Automatsko uklapanje
+	Initial column width:	Početna širina kolone:
+	AutoFit to contents	Automatski uklopi prema sadržaju
+	AutoFit to window	Automatski uklopi prema prozoru
+	Separate text at	Razdvoji tekst na
+	Commas	Zarezi
+	Other:	Drugo:
+	The number must be between 1 and {max}.	Broj mora biti između 1 i {max}.
+	The measurement must be between {min} and {max}.	Mera mora biti između {min} i {max}.
+	Recently Used Fonts	Nedavno korišćeni fontovi
+	All Fonts	Svi fontovi
+	Spike	Sakupljač
+	Insert Spike	Umetni iz sakupljača

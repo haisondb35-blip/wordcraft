@@ -459,10 +459,14 @@
 	More templates →	Veel malle →
 	Move or Resize	Teisalda või muuda suurust
 	Multilevel List	Mitmetasemeline loend
+	Multilevel List Library	Mitmetasemeliste loendite teek
+	Article I.	Artikkel I.
+	Chapter 1	Peatükk 1
+	Section 1.01	Jaotis 1.01
 	Multiple Pages	Mitu lehte
 	Name (A–Z)	Nimi (A–Z)
 	Name:	Nimi:
-	Narrow  0.5" all	Kitsas  0,5" kõigil külgedel
+	Narrow  {size} all	Kitsas  {size} kõigil külgedel
 	Navigation	Navigeerimine
 	Navigation Pane	Navigeerimispaan
 	New	Uus
@@ -495,7 +499,7 @@
 	Nonbreaking Hyphen	Poolitamatu sidekriips
 	Nonbreaking Space	Poolitamatu tühik
 	None	Puudub
-	Normal  1" all	Tavaline  1" kõigil külgedel
+	Normal  {size} all	Tavaline  {size} kõigil külgedel
 	Normal Style	Tavaline stiil
 	Not available right now	Praegu pole saadaval
 	Not saved	Salvestamata
@@ -1331,6 +1335,7 @@
 	Apply to:	Rakenda:
 	Whole document	Kogu dokument
 	This section	See jaotis
+	Selected text	Valitud tekst
 	Fill	Täide
 	Setting:	Säte:
 	3-D	Ruumiline
@@ -1502,6 +1507,8 @@
 	Math AutoCorrect	Matemaatika automaatparandus
 	More >>	Rohkem >>
 	Moves	Teisaldused
+	Moved from:	Teisaldatud kohast:
+	Moved to:	Teisaldatud kohta:
 	New document	Uus dokument
 	No changes (read only)	Muudatusi pole (kirjutuskaitstud)
 	Only allow this kind of editing:	Luba ainult seda tüüpi muutmist:
@@ -2079,6 +2086,7 @@
 	Hyphenation zone:	Poolitusala:
 	Italian	Itaalia
 	Croatian	Horvaadi
+	Indonesian	Indoneesia
 	Japanese	Jaapani
 	Korean	Korea
 	Limit consecutive hyphens to:	Järjestikuseid poolitusi kuni:
@@ -2125,6 +2133,16 @@
 	AutoFit Column by Double-Clicking	Veeru automaatne sobitus topeltklõpsuga
 	Region:	Piirkond:
 	Automatic ({region})	Automaatne ({region})
+	Odd Banded Rows	Paaritud vahelduvad read
+	Even Banded Rows	Paaris vahelduvad read
+	Odd Banded Columns	Paaritud vahelduvad veerud
+	Even Banded Columns	Paaris vahelduvad veerud
+	Top Left Cell	Ülemine vasak lahter
+	Top Right Cell	Ülemine parem lahter
+	Bottom Left Cell	Alumine vasak lahter
+	Bottom Right Cell	Alumine parem lahter
+	Inside Horizontal Border	Sisemine horisontaalne ääris
+	Inside Vertical Border	Sisemine vertikaalne ääris
 	Text of the nearest paragraph with a given style (running headers)	Antud stiiliga lähima lõigu tekst (jooksvad päised)
 	Style name:	Stiili nimi:
 # Mail merge: filter and sort recipients (#778)
@@ -2246,3 +2264,30 @@
 	Existing File or Web Page	Olemasolev fail või veebileht
 	Link to:	Link:
 	Place in This Document	Koht selles dokumendis
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Veerg {n}
+	Header row	Päiserida
+	No header row	Päiserida puudub
+	My list has	Minu loendil on
+# Table Layout › Formula dialog (#1210)
+	Formula:	Valem:
+	Paste function:	Kleebi funktsioon:
+# Reading Mode column widths (#1040)
+	Narrow	Kitsas
+	Medium	Keskmine
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Ühenda lahtrid enne tükeldamist
+	Table size	Tabeli suurus
+	AutoFit behavior	Automaatne sobitamine
+	Initial column width:	Veeru algne laius:
+	AutoFit to contents	Sobita sisuga
+	AutoFit to window	Sobita aknaga
+	Separate text at	Eralda tekst kohas
+	Commas	Komad
+	Other:	Muu:
+	The number must be between 1 and {max}.	Arv peab olema vahemikus 1 kuni {max}.
+	The measurement must be between {min} and {max}.	Mõõt peab olema vahemikus {min} kuni {max}.
+	Recently Used Fonts	Viimati kasutatud fondid
+	All Fonts	Kõik fondid
+	Spike	Koguja
+	Insert Spike	Lisa kogujast

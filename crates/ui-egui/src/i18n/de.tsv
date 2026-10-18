@@ -159,6 +159,7 @@
 	Apply to:	Übernehmen für:
 	Whole document	Gesamtes Dokument
 	This section	Dieser Abschnitt
+	Selected text	Markierter Text
 	Fill	Füllung
 	Setting:	Einstellung:
 	3-D	3D
@@ -510,10 +511,14 @@
 	Modify…	Ändern…
 	Move or Resize	Verschieben oder Größe ändern
 	Multilevel List	Mehrstufige Liste
+	Multilevel List Library	Bibliothek mehrstufiger Listen
+	Article I.	Artikel I.
+	Chapter 1	Kapitel 1
+	Section 1.01	Abschnitt 1.01
 	Multiple Pages	Mehrere Seiten
 	Name (A–Z)	Name (A–Z)
 	Name:	Name:
-	Narrow  0.5" all	Schmal  0,5" rundum
+	Narrow  {size} all	Schmal  {size} rundum
 	Navigation	Navigation
 	Navigation Pane	Navigationsbereich
 	New	Neu
@@ -540,7 +545,7 @@
 	Nonbreaking Hyphen	Geschützter Bindestrich
 	Nonbreaking Space	Geschütztes Leerzeichen
 	None	Keine
-	Normal  1" all	Normal  1" rundum
+	Normal  {size} all	Normal  {size} rundum
 	Normal Style	Formatvorlage „Standard“
 	Not available right now	Derzeit nicht verfügbar
 	Not saved	Nicht gespeichert
@@ -1526,6 +1531,8 @@
 	Math AutoCorrect	Math. AutoKorrektur
 	More >>	Mehr >>
 	Moves	Verschiebungen
+	Moved from:	Verschoben von:
+	Moved to:	Verschoben nach:
 	New document	Neues Dokument
 	No changes (read only)	Keine Änderungen (schreibgeschützt)
 	Only allow this kind of editing:	Nur diese Art der Bearbeitung zulassen:
@@ -2026,6 +2033,7 @@
 	Hyphenation zone:	Silbentrennzone:
 	Italian	Italienisch
 	Croatian	Kroatisch
+	Indonesian	Indonesisch
 	Japanese	Japanisch
 	Korean	Koreanisch
 	Limit consecutive hyphens to:	Aufeinanderfolgende Trennstriche begrenzen auf:
@@ -2082,6 +2090,16 @@
 	Hindi	Hindi
 	Context	Kontext
 	System	System
+	Odd Banded Rows	Ungerade gestreifte Zeilen
+	Even Banded Rows	Gerade gestreifte Zeilen
+	Odd Banded Columns	Ungerade gestreifte Spalten
+	Even Banded Columns	Gerade gestreifte Spalten
+	Top Left Cell	Zelle oben links
+	Top Right Cell	Zelle oben rechts
+	Bottom Left Cell	Zelle unten links
+	Bottom Right Cell	Zelle unten rechts
+	Inside Horizontal Border	Innere horizontale Rahmenlinie
+	Inside Vertical Border	Innere vertikale Rahmenlinie
 # Mail merge: filter and sort recipients (#778)
 	Filter Recipients	Empfänger filtern
 	Sort Recipients	Empfänger sortieren
@@ -2211,3 +2229,30 @@
 	Existing File or Web Page	Datei oder Webseite
 	Link to:	Link zu:
 	Place in This Document	Aktuelles Dokument
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Spalte {n}
+	Header row	Überschriftszeile
+	No header row	Keine Überschriftszeile
+	My list has	Meine Liste hat
+# Table Layout › Formula dialog (#1210)
+	Formula:	Formel:
+	Paste function:	Funktion einfügen:
+# Reading Mode column widths (#1040)
+	Narrow	Schmal
+	Medium	Mittel
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Zellen vor dem Teilen verbinden
+	Table size	Tabellengröße
+	AutoFit behavior	Automatische Anpassung
+	Initial column width:	Anfangsspaltenbreite:
+	AutoFit to contents	An Inhalt anpassen
+	AutoFit to window	An Fenster anpassen
+	Separate text at	Text trennen bei
+	Commas	Kommas
+	Other:	Andere:
+	The number must be between 1 and {max}.	Die Zahl muss zwischen 1 und {max} liegen.
+	The measurement must be between {min} and {max}.	Das Maß muss zwischen {min} und {max} liegen.
+	Recently Used Fonts	Zuletzt verwendete Schriftarten
+	All Fonts	Alle Schriftarten
+	Spike	Sammlung
+	Insert Spike	Sammlung einfügen

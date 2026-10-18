@@ -198,6 +198,7 @@
 	Use the Insert key to switch overtype on and off	Usar la tecla Insert para activar y desactivar la sobrescritura
 	Whole document	Todo el documento
 	This section	Esta sección
+	Selected text	Texto seleccionado
 	Fill	Relleno de color
 	Setting:	Valor:
 	3-D	3D
@@ -582,10 +583,14 @@
 	More templates →	Más plantillas →
 	Move or Resize	Mover o cambiar tamaño
 	Multilevel List	Lista multinivel
+	Multilevel List Library	Biblioteca de listas multinivel
+	Article I.	Artículo I.
+	Chapter 1	Capítulo 1
+	Section 1.01	Sección 1.01
 	Multiple Pages	Varias páginas
 	Name (A–Z)	Nombre (A–Z)
 	Name:	Nombre:
-	Narrow  0.5" all	Estrecho  0,5" en todos
+	Narrow  {size} all	Estrecho  {size} en todos
 	Navigation	Navegación
 	Navigation Pane	Panel de navegación
 	New	Nuevo
@@ -614,7 +619,7 @@
 	Nonbreaking Hyphen	Guion no separable
 	Nonbreaking Space	Espacio de no separación
 	None	Ninguno
-	Normal  1" all	Normal  1" en todos
+	Normal  {size} all	Normal  {size} en todos
 	Normal Style	Estilo normal
 	Not available right now	No disponible por ahora
 	Not saved	Sin guardar
@@ -1523,6 +1528,8 @@
 	Math AutoCorrect	Autocorrección matemática
 	More >>	Más >>
 	Moves	Movimientos
+	Moved from:	Movido desde:
+	Moved to:	Movido a:
 	New document	Documento nuevo
 	No changes (read only)	Sin cambios (solo lectura)
 	Only allow this kind of editing:	Permitir solo este tipo de edición:
@@ -2085,6 +2092,7 @@
 	Hyphenation zone:	Zona de separación:
 	Italian	Italiano
 	Croatian	Croata
+	Indonesian	Indonesio
 	Japanese	Japonés
 	Korean	Coreano
 	Limit consecutive hyphens to:	Limitar guiones consecutivos a:
@@ -2457,6 +2465,16 @@ preview	Title	Título
 	Other Large Operators	Otros operadores grandes
 	Region:	Región:
 	Automatic ({region})	Automático ({region})
+	Odd Banded Rows	Filas impares con bandas
+	Even Banded Rows	Filas pares con bandas
+	Odd Banded Columns	Columnas impares con bandas
+	Even Banded Columns	Columnas pares con bandas
+	Top Left Cell	Celda superior izquierda
+	Top Right Cell	Celda superior derecha
+	Bottom Left Cell	Celda inferior izquierda
+	Bottom Right Cell	Celda inferior derecha
+	Inside Horizontal Border	Borde horizontal interior
+	Inside Vertical Border	Borde vertical interior
 	Text of the nearest paragraph with a given style (running headers)	Texto del párrafo más cercano con un estilo dado (encabezados variables)
 	Style name:	Nombre del estilo:
 # Mail merge: filter and sort recipients (#778)
@@ -2578,3 +2596,30 @@ preview	Title	Título
 	Existing File or Web Page	Archivo o página web existente
 	Link to:	Vincular a:
 	Place in This Document	Lugar de este documento
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Columna {n}
+	Header row	Fila de encabezado
+	No header row	Sin fila de encabezado
+	My list has	Mi lista tiene
+# Table Layout › Formula dialog (#1210)
+	Formula:	Fórmula:
+	Paste function:	Pegar función:
+# Reading Mode column widths (#1040)
+	Narrow	Estrecha
+	Medium	Media
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Combinar celdas antes de dividir
+	Table size	Tamaño de la tabla
+	AutoFit behavior	Autoajuste
+	Initial column width:	Ancho de columna inicial:
+	AutoFit to contents	Ajustar al contenido
+	AutoFit to window	Ajustar a la ventana
+	Separate text at	Separar texto en
+	Commas	Comas
+	Other:	Otro:
+	The number must be between 1 and {max}.	El número debe estar entre 1 y {max}.
+	The measurement must be between {min} and {max}.	La medida debe estar entre {min} y {max}.
+	Recently Used Fonts	Fuentes usadas recientemente
+	All Fonts	Todas las fuentes
+	Spike	Acumulador
+	Insert Spike	Insertar acumulador

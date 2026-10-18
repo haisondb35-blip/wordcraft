@@ -22,7 +22,7 @@
 	Accept	Принять
 	Accept All Changes	Принять все изменения
 	Accept This Change	Принять это изменение
-	Accessibility	Специальные возможности
+	Accessibility	Доступность
 	Add	Добавить
 	Add a comment	Добавить комментарий
 	Add a Table	Добавить таблицу
@@ -442,10 +442,14 @@
 	Modify Style	Изменить стиль
 	Modify…	Изменить…
 	Multilevel List	Многоуровневый список
+	Multilevel List Library	Библиотека многоуровневых списков
+	Article I.	Статья I.
+	Chapter 1	Глава 1
+	Section 1.01	Раздел 1.01
 	Multiple Pages	Несколько страниц
 	Name (A–Z)	Имя (А–Я)
 	Name:	Имя:
-	Narrow  0.5" all	Узкие  0,5" со всех сторон
+	Narrow  {size} all	Узкие  {size} со всех сторон
 	Navigation	Навигация
 	Navigation Pane	Область навигации
 	New	Создать
@@ -474,7 +478,7 @@
 	Nonbreaking Space	Неразрывный пробел
 	None	Нет
 	Normal	Обычный
-	Normal  1" all	Обычные  1" со всех сторон
+	Normal  {size} all	Обычные  {size} со всех сторон
 	Normal Indent	Обычный отступ
 	Normal Style	Обычный стиль
 	Normal Table	Обычная таблица
@@ -1620,6 +1624,7 @@ preview	Title	Пример
 	Apply to:	Применить к:
 	Whole document	Ко всему документу
 	This section	К этому разделу
+	Selected text	К выделенному тексту
 	Fill	Заливка
 	Setting:	Тип:
 	3-D	Объёмная
@@ -2085,6 +2090,8 @@ preview	Title	Пример
 	Math AutoCorrect	Автозамена математическими символами
 	More >>	Больше >>
 	Moves	Перемещения
+	Moved from:	Перемещено из:
+	Moved to:	Перемещено в:
 	New document	Новый документ
 	No changes (read only)	Без изменений (только чтение)
 	Only allow this kind of editing:	Разрешить только такой способ редактирования:
@@ -2380,6 +2387,7 @@ preview	Title	Пример
 	Hyphenation zone:	Зона переноса слов:
 	Italian	Итальянский
 	Croatian	Хорватский
+	Indonesian	Индонезийский
 	Japanese	Японский
 	Korean	Корейский
 	Limit consecutive hyphens to:	Максимум последовательных переносов:
@@ -2474,6 +2482,16 @@ preview	Title	Пример
 	AutoFit Column by Double-Clicking	Автоподбор ширины столбца двойным щелчком
 	Region:	Регион:
 	Automatic ({region})	Автоматически ({region})
+	Odd Banded Rows	Нечётные чередующиеся строки
+	Even Banded Rows	Чётные чередующиеся строки
+	Odd Banded Columns	Нечётные чередующиеся столбцы
+	Even Banded Columns	Чётные чередующиеся столбцы
+	Top Left Cell	Левая верхняя ячейка
+	Top Right Cell	Правая верхняя ячейка
+	Bottom Left Cell	Левая нижняя ячейка
+	Bottom Right Cell	Правая нижняя ячейка
+	Inside Horizontal Border	Внутренняя горизонтальная граница
+	Inside Vertical Border	Внутренняя вертикальная граница
 	Text of the nearest paragraph with a given style (running headers)	Текст ближайшего абзаца с заданным стилем (живые колонтитулы)
 	Style name:	Имя стиля:
 # Mail merge: filter and sort recipients (#778)
@@ -2609,3 +2627,30 @@ preview	Title	Пример
 	Existing File or Web Page	Файл или веб-страница
 	Link to:	Связать с:
 	Place in This Document	Место в документе
+# Table Layout › Sort dialog (#1205)
+	Column {n}	Столбец {n}
+	Header row	Строка заголовка
+	No header row	Без строки заголовка
+	My list has	Мой список содержит
+# Table Layout › Formula dialog (#1210)
+	Formula:	Формула:
+	Paste function:	Вставить функцию:
+# Reading Mode column widths (#1040)
+	Narrow	Узкая
+	Medium	Средняя
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Объединить ячейки перед разбиением
+	Table size	Размер таблицы
+	AutoFit behavior	Автоподбор ширины столбцов
+	Initial column width:	Исходная ширина столбцов:
+	AutoFit to contents	Автоподбор по содержимому
+	AutoFit to window	Автоподбор по ширине окна
+	Separate text at	Разделитель
+	Commas	Запятые
+	Other:	Другой:
+	The number must be between 1 and {max}.	Число должно быть от 1 до {max}.
+	The measurement must be between {min} and {max}.	Размер должен быть от {min} до {max}.
+	Recently Used Fonts	Недавно использованные шрифты
+	All Fonts	Все шрифты
+	Spike	Копилка
+	Insert Spike	Вставить из копилки
