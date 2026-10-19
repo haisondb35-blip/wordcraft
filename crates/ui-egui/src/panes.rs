@@ -86,7 +86,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             .resizable(true)
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(10).stroke(Stroke::new(1.0, t.border)))
             .show(ui, |ui| {
-                if header(ui, "Claude") {
+                if header(ui, "AI Assistant") {
                     app.assistant_open = false;
                     return;
                 }

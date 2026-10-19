@@ -307,6 +307,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 let share = tl!("Share");
                 let editing_label = if app.session.doc.settings.track_changes { tl!("Reviewing") } else { tl!("Editing") };
                 let comments = tl!("Comments");
+                let assistant = tl!("AI Assistant");
                 let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
                 let spaced = |w: f32| w + 2.0;
                 let button_widths = |level: usize| -> f32 {
@@ -315,8 +316,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     let share_button = if level < 2 { share_full } else { 30.0 };
                     let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
                     let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
-                    // The gaps (6 + 4 + 8) and the strip's margin.
-                    spaced(share_button) + spaced(editing) + spaced(comment) + 18.0 + 12.0
+                    let ai = crate::widgets::icon_text_button_width(ui, assistant, regular(12.0), false, labels);
+                    // The gaps (6 + 4 + 4 + 8) and the strip's margin.
+                    spaced(share_button) + spaced(editing) + spaced(comment) + spaced(ai) + 22.0 + 12.0
                 };
                 let button_levels = [button_widths(0), button_widths(1), button_widths(2)];
                 let labels: Vec<&str> = tabs.iter().map(|(tab, custom)| if *custom { tab.as_str() } else { tl!(tab) }).collect();
@@ -379,6 +381,16 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     };
                     if comments_button.clicked() {
                         let _ = app.run("view.commentsPane", json!({}));
+                    }
+                    // The assistant pane: Claude or ChatGPT working on the document.
+                    ui.add_space(4.0);
+                    let assistant_button = if plan.buttons == 0 {
+                        crate::widgets::icon_text_button(ui, "researcher", assistant, regular(12.0))
+                    } else {
+                        crate::widgets::icon_only_button(ui, "researcher", assistant, regular(12.0), false)
+                    };
+                    if assistant_button.clicked() {
+                        let _ = app.run("ui.claudePane", json!({}));
                     }
                     ui.add_space(8.0);
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -1181,9 +1193,6 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
     });
     group(ui, "Editor", None, app, |ui, app| {
         big(ui, app, "editor", "Editor", "review.spelling", json!({}), false);
-    });
-    group(ui, "Claude", None, app, |ui, app| {
-        big(ui, app, "researcher", "Claude", "ui.claudePane", json!({}), false);
     });
 }
 

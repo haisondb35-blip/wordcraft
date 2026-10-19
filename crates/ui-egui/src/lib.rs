@@ -1476,7 +1476,7 @@ impl WordApp {
                 json!({"dark": dark, "theme": self.ui.theme.code()})
             }
             "ui.claudePane" => {
-                // Home › Claude: show or hide the pane (`value`; toggles without it).
+                // The AI Assistant button (beside Comments): show or hide the pane (`value`; toggles without it).
                 self.assistant_open = p.get("value").and_then(Value::as_bool).unwrap_or(!self.assistant_open);
                 json!({"open": self.assistant_open})
             }
