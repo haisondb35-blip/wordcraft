@@ -10,8 +10,8 @@
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use wordcraft_doc::para::{InlineObject, OBJ};
-use wordcraft_doc::props::CharProps;
-use wordcraft_doc::{Document, Path, PermRange, Pos, StoryRef};
+use wordcraft_doc::props::{CellProps, CharProps, RowProps, TableProps};
+use wordcraft_doc::{Block, Blocks, Document, Path, PermRange, Pos, StoryRef};
 
 use crate::{CmdError, CmdResult, CommandSpec, Session, p};
 
@@ -45,6 +45,13 @@ pub fn state(s: &Session) -> Value {
 /// Is the document's editing or formatting restricted?
 pub fn enforced(doc: &Document) -> bool {
     doc.settings.protection.is_some()
+}
+
+/// Is the document's editing restricted? The formatting-only protection stores the mode "none"
+/// (`w:documentProtection w:edit="none"` with `w:formatting="1"`), so it doesn't count here: it
+/// limits the styles, not the editing.
+pub fn editing_restricted(doc: &Document) -> bool {
+    doc.settings.protection.as_deref().is_some_and(|m| m != "none")
 }
 
 /// May `author` edit inside the range?
@@ -82,7 +89,14 @@ fn restrict(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Params(format!("unknown `mode` {m:?}: none, readOnly, comments, trackedChanges or forms")));
     }
     let formatting = p::bool(v, "formatting");
-    let stop = p::bool(v, "stop") == Some(true) || (mode == Some("none") && formatting != Some(true));
+    let explicit_stop = p::bool(v, "stop") == Some(true);
+    // Stopping the protection is explicit: the "none" mode is the shorthand for it, but on a
+    // protected document only `{"stop": true}` stops it — a command that merely names a mode
+    // can't strip a user's protection (Word asks for Stop Protection first).
+    if mode == Some("none") && formatting != Some(true) && !explicit_stop && enforced(&s.doc) {
+        return Err(CmdError::Disabled("the document is protected: stop protection first (\"stop\": true)".into()));
+    }
+    let stop = explicit_stop || (mode == Some("none") && formatting != Some(true));
     if stop {
         return stop_protection(s, p::str(v, "password").unwrap_or(""));
     }
@@ -90,8 +104,16 @@ fn restrict(s: &mut Session, v: &Value) -> CmdResult {
         // Only the locked styles changed (or nothing): report the state.
         return Ok(state(s));
     }
-    if enforced(&s.doc) && !s.doc.settings.protect_hash.is_empty() {
-        return Err(CmdError::Disabled("the document is protected with a password: stop protection first".into()));
+    // The protection of a protected document doesn't change: Word asks for Stop Protection first.
+    // (The formatting-only protection isn't one: it limits the styles, not the editing — but a
+    // password on it still guards it, so it can't be replaced either.)
+    if editing_restricted(&s.doc) || !s.doc.settings.protect_hash.is_empty() {
+        let why = if s.doc.settings.protect_hash.is_empty() {
+            "the document is protected: stop protection first"
+        } else {
+            "the document is protected with a password: stop protection first"
+        };
+        return Err(CmdError::Disabled(why.into()));
     }
     let formatting = formatting.unwrap_or(false);
     let mode = mode.unwrap_or("none");
@@ -189,9 +211,78 @@ fn remove_exceptions(s: &mut Session, all: bool) -> Result<(), CmdError> {
     Ok(())
 }
 
-/// Commands always allowed in a protected document: protection itself, file commands, undo.
-fn always_allowed(id: &str) -> bool {
-    id == "review.restrict" || id.starts_with("file.") || id == "edit.undo" || id == "edit.redo"
+/// The Developer tab's commands that insert a content control.
+const CONTROL_INSERTS: [&str; 9] = [
+    "developer.richText",
+    "developer.plainText",
+    "developer.picture",
+    "developer.buildingBlock",
+    "developer.checkBox",
+    "developer.comboBox",
+    "developer.dropDown",
+    "developer.datePicker",
+    "developer.repeatingSection",
+];
+
+/// Commands always allowed in a protected document: protection itself, undo, and the file
+/// commands that don't change the open document. A `file.*` command that does change it is
+/// checked like any other, so the protection holds for it too: the privacy options and the
+/// properties are document settings, and the inspector removes content (#1327 follow-up).
+fn always_allowed(id: &str, params: &Value) -> bool {
+    if id == "review.restrict" || id == "edit.undo" || id == "edit.redo" {
+        return true;
+    }
+    if !id.starts_with("file.") {
+        return false;
+    }
+    match id {
+        "file.privacyOptions" | "file.properties" => false,
+        // The user name says who may edit the document and who the revisions belong to: it is
+        // checked like any other change, not waved through.
+        "file.setAuthor" => false,
+        // The inspector reads the document; its removals change it.
+        "file.inspect" => params.get("remove").and_then(Value::as_array).is_none_or(|a| a.is_empty()),
+        _ => true,
+    }
+}
+
+/// The user name (`file.setAuthor`) is the identity a named exception range is checked against,
+/// and the author recorded on new revisions and comments: it can't change while the document is
+/// protected. Word lets the user name change under protection (it is a preference there); this
+/// project doesn't, because the name says who may edit what (#1327 follow-up).
+pub(crate) fn check_user_name(s: &Session) -> Result<(), CmdError> {
+    if enforced(&s.doc) {
+        return Err(CmdError::Disabled("file.setAuthor: stop protection before changing the user name".into()));
+    }
+    Ok(())
+}
+
+/// A version restore replaces the whole document, including the content the protection kept
+/// read-only, so it needs the protection stopped first — and the password with it, when the
+/// document has one. (`file.versions` is a pure command, so `check_before` doesn't see it; the
+/// command checks this itself — see [`check_version_restore`].)
+pub(crate) fn check_version_restore(s: &Session) -> Result<(), CmdError> {
+    if enforced(&s.doc) {
+        return Err(CmdError::Disabled("file.versions: stop protection before restoring a version".into()));
+    }
+    Ok(())
+}
+
+/// Why protection refuses command `id` whatever its params and the selection, so the ribbon greys
+/// it out ([`Session::why_disabled`]); cheap enough to ask for every button on every frame.
+/// Observed in Word for Mac: with Filling in forms enforced, the Developer tab's control buttons
+/// and Properties are greyed out and a field's shortcut menu offers no Remove Content Control.
+/// The form's fields stay as they are; only their content is filled in.
+pub(crate) fn greyed_out(s: &Session, id: &str) -> Option<&'static str> {
+    if s.doc.settings.protection.as_deref() != Some("forms") {
+        return None;
+    }
+    match id {
+        "developer.removeControl" => Some("stop protection before removing a content control"),
+        "developer.properties" => Some("stop protection before changing a content control's properties"),
+        _ if CONTROL_INSERTS.contains(&id) => Some("stop protection before inserting a content control"),
+        _ => None,
+    }
 }
 
 /// What a protected document lets command `id` do before it runs: `Err` refuses it; `Ok(true)`
@@ -199,15 +290,43 @@ fn always_allowed(id: &str) -> bool {
 /// [`outside_unchanged`]).
 pub(crate) fn check_before(s: &Session, id: &str, params: &Value) -> Result<bool, CmdError> {
     let Some(mode) = s.doc.settings.protection.as_deref() else { return Ok(false) };
-    if always_allowed(id) {
+    if always_allowed(id, params) {
         return Ok(false);
+    }
+    // The user name says who may edit the document, and who the new revisions and comments
+    // belong to: it can't change while the document is protected. (`file.setAuthor` is a pure
+    // command, so `check_before` doesn't see it; the command checks this itself — see
+    // [`check_user_name`].)
+    if id == "file.setAuthor" {
+        check_user_name(s)?;
     }
     // Word blocks content-control property edits until Stop Protection: changing a control's
     // lock flags would reshape what forms mode lets through. The param's presence is the
     // trigger — absent, the command keeps the current lock (as `check_formatting` inspects
-    // params); other properties (title, tag, placeholder…) are unaffected.
+    // params). In other modes, other properties (title, tag, placeholder…) stay editable; forms
+    // mode refuses every property change (below).
     if id == "developer.properties" && (params.get("lockEdit").is_some() || params.get("lockDelete").is_some()) {
         return Err(CmdError::Disabled(format!("{id}: stop protection before changing a content control's locks")));
+    }
+    // The document's properties and its privacy options are document-wide state, and they aren't
+    // tracked: a document that tracks changes would take them with no revision to show for it, and
+    // the revision trail would say nothing about them. They're refused while the document is
+    // protected, as the content control's properties are (#3278 follow-up).
+    // The inspector's removals take content out of the document — the comments, the revisions,
+    // the properties, the hidden text, the headers — so they are refused in every mode too: under
+    // tracked changes they would change the document with no revision to show for it, and under
+    // the other modes the document may not change at all. (An inspection without removals only
+    // reads the document, and is let through by `always_allowed`.)
+    if enforced(&s.doc) {
+        match id {
+            "file.properties" => return Err(CmdError::Disabled(format!("{id}: stop protection before changing the document's properties"))),
+            "file.privacyOptions" => return Err(CmdError::Disabled(format!("{id}: stop protection before changing the privacy options"))),
+            "file.inspect" => return Err(CmdError::Disabled(format!("{id}: stop protection before removing content with the inspector"))),
+            _ => {}
+        }
+    }
+    if let Some(why) = greyed_out(s, id) {
+        return Err(CmdError::Disabled(format!("{id}: {why}")));
     }
     if s.doc.settings.protect_formatting {
         check_formatting(s, id, params)?;
@@ -222,6 +341,9 @@ pub(crate) fn check_before(s: &Session, id: &str, params: &Value) -> Result<bool
         "comments" if comment_ok => Ok(false),
         "comments" if exceptions() => Ok(true),
         "comments" => Err(CmdError::Disabled(format!("{id}: only comments are allowed in this document"))),
+        "trackedChanges" if matches!(id, "review.accept" | "review.reject" | "review.acceptAll" | "review.rejectAll" | "review.trackChanges") => {
+            Err(CmdError::Disabled(format!("{id}: changes to this document are tracked")))
+        }
         _ => Ok(false),
     }
 }
@@ -229,7 +351,7 @@ pub(crate) fn check_before(s: &Session, id: &str, params: &Value) -> Result<bool
 /// Formatting limited to a selection of styles: no direct formatting, and no locked style.
 fn check_formatting(s: &Session, id: &str, params: &Value) -> Result<(), CmdError> {
     let style = match id {
-        "para.style" | "format.charStyle" => p::str(params, "style"),
+        "para.style" | "format.charStyle" | "table.style" => p::str(params, "style"),
         "para.normal" => Some("Normal"),
         "para.heading1" => Some("Heading1"),
         "para.heading2" => Some("Heading2"),
@@ -245,7 +367,26 @@ fn check_formatting(s: &Session, id: &str, params: &Value) -> Result<(), CmdErro
         || id.starts_with("styles.create")
         || id.starts_with("styles.modify")
         || id.starts_with("styles.update")
-        || id.starts_with("styles.delete");
+        || id.starts_with("styles.delete")
+        // Direct formatting outside the prefixes: Paste Formatting, and table and cell formatting.
+        || matches!(
+            id,
+            "edit.pasteFormat"
+                | "table.shading"
+                | "table.borders"
+                | "table.borderPainter"
+                | "table.cellAlign"
+                | "table.cellMargins"
+                | "table.textDirection"
+                | "table.properties"
+                | "table.rowHeight"
+                | "table.newStyle"
+                | "table.modifyStyle"
+                | "table.deleteStyle"
+                | "tools.updateStyles"
+        )
+        // Attach Template updates the styles from it when asked (`linkStyles` is only a setting).
+        || (id == "tools.attachTemplate" && p::bool(params, "update") == Some(true));
     if direct {
         return Err(CmdError::Disabled(format!("{id}: formatting is limited to the document's styles")));
     }
@@ -261,19 +402,65 @@ enum HoleMode {
 }
 
 /// Did a command leave everything outside the editable regions as it was? Compares the text,
-/// run formatting and paragraph formatting outside the ranges `author` may edit, in every story.
+/// run formatting and paragraph formatting outside the ranges `author` may edit, in every story,
+/// and the formatting of every table, row and cell that holds any of that protected content, and what
+/// reaches the whole document: page setup, the document defaults and the existing styles
+/// (applying a style may add one), the document's settings and its metadata.
 pub(crate) fn outside_unchanged(before: &Document, after: &Document, author: &str) -> bool {
     // Protection can't change mid-command (`protection_lifted` guards undo and redo).
     let mode = if Some("forms") == before.settings.protection.as_deref() { HoleMode::Controls } else { HoleMode::Perms(author.into()) };
-    outside(before, &mode) == outside(after, &mode)
+    let (b, a) = (&before.styles, &after.styles);
+    before.last_section == after.last_section
+        && sections(before) == sections(after)
+        && b.default_chr == a.default_chr
+        && b.default_para == a.default_para
+        && b.styles.iter().all(|st| a.get(&st.id) == Some(st))
+        && before.settings == after.settings
+        && before.core == after.core
+        && before.custom_props == after.custom_props
+        && comments_unchanged(before, after)
+        && lists_unchanged(before, after)
+        && sources_unchanged(before, after)
+        && outside(before, &mode) == outside(after, &mode)
 }
 
-/// One piece of protected content: text with its formatting, or a paragraph mark's formatting.
+/// The comments' resolved flags: a comment's text is a part, and the parts are compared with the
+/// rest of the document; the flag is the comment's own state.
+fn comments_unchanged(before: &Document, after: &Document) -> bool {
+    before.comments.iter().all(|(id, c)| after.comments.get(id).is_some_and(|a| a.resolved == c.resolved))
+}
+
+/// The list definitions: the ones the document had must be unchanged — a list's format reaches
+/// every paragraph that uses it — but a new one may be added, like a new style: applying a list
+/// inside an editable region adds its definition.
+fn lists_unchanged(before: &Document, after: &Document) -> bool {
+    before.numbering.abstracts.iter().all(|x| after.numbering.abstracts.contains(x))
+        && before.numbering.nums.iter().all(|x| after.numbering.nums.contains(x))
+}
+
+/// The bibliography sources: the ones the document had must be unchanged; a new one may be added
+/// (a citation inserted inside an editable region).
+fn sources_unchanged(before: &Document, after: &Document) -> bool {
+    before.sources.iter().all(|x| after.sources.contains(x))
+}
+
+/// The section properties paragraphs end, in order.
+fn sections(doc: &Document) -> Vec<&wordcraft_doc::SectionProps> {
+    doc.para_paths(StoryRef::Body).iter().filter_map(|path| doc.para(StoryRef::Body, path)?.section.as_deref()).collect()
+}
+
+/// One piece of protected content: text with its formatting, a paragraph mark's formatting, or
+/// the formatting of a table, row or cell holding protected content.
 #[derive(PartialEq, Debug)]
 enum Piece {
     Text(String, CharProps),
     Object(Option<InlineObject>),
     Mark(Box<wordcraft_doc::ParaProps>, CharProps),
+    /// Tables nested deeper than the paragraph walk reaches, compared as a whole.
+    Deep(String),
+    Table(Box<TableProps>, Vec<f32>),
+    Row(Box<RowProps>),
+    Cell(Box<CellProps>),
 }
 
 /// The control markers of a story that pair, bracket-style — the start and end positions of
@@ -304,8 +491,12 @@ fn outside(doc: &Document, mode: &HoleMode) -> Vec<Piece> {
             HoleMode::Perms(_) => !open.is_empty(),
             HoleMode::Controls => fillable.last() == Some(&true),
         };
+        // The paragraphs with protected content, and every table, row and cell above them.
+        let mut protected: HashSet<Vec<u32>> = HashSet::new();
+        let mut holding: HashSet<Vec<u32>> = HashSet::new();
         for path in doc.para_paths(story) {
             let Some(p) = doc.para(story, &path) else { continue };
+            let pieces = out.len();
             let mut k = 0;
             for (r, props) in p.run_ranges() {
                 let Some(text) = p.text.get(r.clone()) else { continue };
@@ -361,9 +552,54 @@ fn outside(doc: &Document, mode: &HoleMode) -> Vec<Piece> {
             if !in_hole(&open, &fillable) {
                 out.push(Piece::Mark(Box::new(p.props.clone()), p.mark.clone()));
             }
+            let ancestors = (1..path.0.len()).filter_map(|n| path.0.get(..n));
+            if out.len() > pieces {
+                protected.extend(ancestors.clone().map(<[u32]>::to_vec));
+            }
+            holding.extend(ancestors.map(<[u32]>::to_vec));
+        }
+        if let Some(blocks) = doc.story(story) {
+            structure(blocks, &mut Vec::new(), &protected, &holding, &mut out, 0);
         }
     }
     out
+}
+
+/// The formatting of every table, row and cell in `blocks` that holds protected content (or no
+/// paragraph at all): an exception covering only some of it can't reformat the rest.
+fn structure(blocks: &Blocks, prefix: &mut Vec<u32>, protected: &HashSet<Vec<u32>>, holding: &HashSet<Vec<u32>>, out: &mut Vec<Piece>, depth: usize) {
+    // `Document::para_paths` stops at the same depth; deeper nesting can't hold an editable
+    // exception, so any change below it counts as a change to protected content.
+    if depth > 16 {
+        if !blocks.is_empty() {
+            out.push(Piece::Deep(format!("{blocks:?}")));
+        }
+        return;
+    }
+    let guarded = |at: &Vec<u32>| protected.contains(at) || !holding.contains(at);
+    for (i, b) in blocks.iter().enumerate() {
+        let Block::Table(t) = &**b else { continue };
+        prefix.push(u32::try_from(i).unwrap_or(u32::MAX));
+        if guarded(prefix) {
+            out.push(Piece::Table(Box::new(t.props.clone()), t.grid.clone()));
+        }
+        for (r, row) in t.rows.iter().enumerate() {
+            prefix.push(u32::try_from(r).unwrap_or(u32::MAX));
+            if guarded(prefix) {
+                out.push(Piece::Row(Box::new(row.props.clone())));
+            }
+            for (c, cell) in row.cells.iter().enumerate() {
+                prefix.push(u32::try_from(c).unwrap_or(u32::MAX));
+                if guarded(prefix) {
+                    out.push(Piece::Cell(Box::new(cell.props.clone())));
+                }
+                structure(&cell.blocks, prefix, protected, holding, out, depth + 1);
+                prefix.pop();
+            }
+            prefix.pop();
+        }
+        prefix.pop();
+    }
 }
 
 fn flush(out: &mut Vec<Piece>, piece: &mut String, props: &CharProps, in_hole: bool) {
@@ -431,6 +667,377 @@ mod tests {
         assert_eq!(s.doc.settings.protection.as_deref(), Some("readOnly"));
     }
 
+    /// Table, row and cell formatting reaches protected text, so an exception inside one cell
+    /// doesn't let table commands run there change the table, the row or the cell (#1327).
+    #[test]
+    fn read_only_exception_in_a_cell_does_not_open_the_table() {
+        let mut s = Session::new(Document::from_text("Intro."));
+        s.run("insert.table", &json!({"rows": 2, "cols": 2})).unwrap();
+        for (i, t) in ["Alpha", "Bravo", "Charlie", "Delta"].iter().enumerate() {
+            if i > 0 {
+                s.run("text.tab", &json!({})).unwrap();
+            }
+            s.run("text.insert", &json!({"text": t})).unwrap();
+        }
+        select(&mut s, "Alpha");
+        s.run("review.restrict", &json!({"exception": "add"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        // Typing inside the exception still works.
+        select(&mut s, "lph");
+        s.run("text.insert", &json!({"text": "LPH"})).unwrap();
+        select(&mut s, "LPH");
+        let before = s.doc.clone();
+        for (id, v) in [
+            ("table.properties", json!({"align": "center"})),
+            ("table.rowHeight", json!({"height": 40})),
+            ("table.shading", json!({"color": "FF0000"})),
+            ("table.cellAlign", json!({"value": "bottomRight"})),
+            ("table.borders", json!({"kind": "none"})),
+        ] {
+            let e = s.run(id, &v).unwrap_err().to_string();
+            assert!(e.contains("only the editable regions"), "{id}: {e}");
+            assert_eq!(s.doc, before, "{id}");
+        }
+    }
+
+    /// A table wholly inside an exception stays formattable: its table, rows and cells hold no
+    /// protected content.
+    #[test]
+    fn read_only_exception_around_a_table_lets_it_be_formatted() {
+        let mut s = Session::new(Document::from_text("Locked.\nStart."));
+        s.sel = Selection::caret(s.doc.end_of(StoryRef::Body));
+        s.run("insert.table", &json!({"rows": 2, "cols": 2})).unwrap();
+        s.run("text.insert", &json!({"text": "Alpha"})).unwrap();
+        select(&mut s, "Start.");
+        let anchor = s.sel.ordered().0;
+        s.sel = Selection { anchor, focus: s.doc.end_of(StoryRef::Body) };
+        s.run("review.restrict", &json!({"exception": "add"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        select(&mut s, "Alpha");
+        s.run("table.properties", &json!({"align": "center"})).unwrap();
+        s.run("table.rowHeight", &json!({"height": 40})).unwrap();
+        s.run("table.shading", &json!({"color": "FF0000"})).unwrap();
+        // The text before the exception is still protected.
+        select(&mut s, "Locked");
+        assert!(s.run("format.bold", &json!({})).is_err());
+    }
+
+    /// Formatting limited to styles: attaching a template refuses to update the styles from it
+    /// (it would bypass the Update Styles block); attaching without updating still works.
+    #[test]
+    fn formatting_restriction_refuses_attach_template_update() {
+        let mut t = Document::from_text("Template.");
+        if let Some(st) = t.styles.styles.iter_mut().find(|st| st.id == "Heading1") {
+            st.chr.size = Some(31.0);
+        }
+        let data = crate::cmd::insert::base64_encode(&crate::io::save_bytes("t.docx", &t).unwrap());
+        let mut s = Session::new(Document::from_text("Text."));
+        s.run("review.restrict", &json!({"mode": "none", "formatting": true})).unwrap();
+        let before = s.doc.clone();
+        let e = s.run("tools.attachTemplate", &json!({"path": "Report.dotx", "update": true, "data": data})).unwrap_err().to_string();
+        assert!(e.contains("formatting is limited"), "{e}");
+        assert_eq!(s.doc, before);
+        s.run("tools.attachTemplate", &json!({"path": "Report.dotx"})).unwrap();
+        assert_eq!(s.doc.settings.attached_template.as_deref(), Some("Report.dotx"));
+    }
+
+    /// Formatting limited to styles: Paste Formatting and table formatting are direct
+    /// formatting, and a locked table style can't be applied (#1327).
+    #[test]
+    fn formatting_restriction_covers_paste_formatting_and_tables() {
+        let mut s = Session::new(Document::from_text("Bold words.\nplain words."));
+        s.run("insert.table", &json!({"rows": 1, "cols": 1})).unwrap();
+        s.run("text.insert", &json!({"text": "Cell"})).unwrap();
+        select(&mut s, "Bold");
+        s.run("format.bold", &json!({})).unwrap();
+        s.run("edit.copyFormat", &json!({})).unwrap();
+        s.run("review.restrict", &json!({"formatting": true, "lockedStyles": ["TableGrid"]})).unwrap();
+        s.run("review.restrict", &json!({"mode": "none", "formatting": true})).unwrap();
+        assert!(s.doc.settings.protect_formatting);
+        select(&mut s, "plain");
+        let before = s.doc.clone();
+        assert!(s.run("edit.pasteFormat", &json!({})).is_err(), "edit.pasteFormat");
+        select(&mut s, "Cell");
+        for (id, v) in [
+            ("table.shading", json!({"color": "FF0000"})),
+            ("table.borders", json!({"kind": "none"})),
+            ("table.cellAlign", json!({"value": "bottomRight"})),
+            ("table.properties", json!({"align": "center"})),
+            ("table.rowHeight", json!({"height": 40})),
+            ("table.style", json!({"style": "TableGrid"})),
+        ] {
+            let e = s.run(id, &v).unwrap_err().to_string();
+            assert!(e.contains("formatting is limited") || e.contains("is locked"), "{id}: {e}");
+        }
+        assert_eq!(s.doc, before);
+    }
+
+    /// Page setup and style definitions reach text outside the exceptions too, so an exception
+    /// doesn't let them change; applying a character style inside one still works.
+    #[test]
+    fn read_only_exception_does_not_open_page_setup_or_styles() {
+        let mut s = Session::new(Document::from_text("Locked intro.\nFill in here.\nLocked end."));
+        select(&mut s, "Fill in here.");
+        s.run("review.restrict", &json!({"exception": "add"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        select(&mut s, "here");
+        let before = s.doc.clone();
+        assert!(s.run("layout.orientation", &json!({"value": "landscape"})).is_err());
+        assert!(s.run("layout.margins", &json!({"preset": "narrow"})).is_err());
+        assert!(s.run("styles.modify", &json!({"style": "Normal", "chr": {"bold": true}})).is_err());
+        assert_eq!(s.doc, before);
+        s.run("format.charStyle", &json!({"style": "Strong"})).unwrap();
+    }
+
+    /// Protected for tracked changes: every edit is tracked, and the changes can't be accepted,
+    /// rejected or untracked (Word disables them too).
+    #[test]
+    fn tracked_changes_protection_keeps_revisions() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "trackedChanges"})).unwrap();
+        select(&mut s, "text");
+        s.run("text.insert", &json!({"text": "words"})).unwrap();
+        let before = s.doc.clone();
+        for id in ["review.acceptAll", "review.rejectAll", "review.accept", "review.reject", "review.trackChanges"] {
+            assert!(s.run(id, &json!({})).is_err(), "{id}");
+        }
+        assert_eq!(s.doc, before);
+    }
+
+    /// A version restore replaces the whole document, including the content the protection kept
+    /// read-only, so it needs the protection stopped first — and the password with it.
+    #[test]
+    fn a_version_restore_needs_the_protection_stopped_first() {
+        for mode in ["readOnly", "forms", "comments", "trackedChanges"] {
+            let mut s = Session::new(Document::from_text("Original text."));
+            s.run("file.versions", &json!({"save": "before"})).unwrap();
+            s.run("review.restrict", &json!({"mode": mode, "password": "pw"})).unwrap();
+            let before = s.doc.clone();
+            let e = s.run("file.versions", &json!({"restore": 0})).unwrap_err().to_string();
+            assert!(e.contains("stop protection"), "{mode}: {e}");
+            assert_eq!(s.doc, before, "{mode}: the restore changed the document");
+            assert_eq!(s.versions.len(), 1, "{mode}: the snapshot is still there");
+        }
+    }
+
+    /// A restore never changes the protection: the live document's choice stands, and a
+    /// snapshot taken while the document was protected doesn't bring that protection back.
+    #[test]
+    fn a_version_restore_keeps_the_live_protection() {
+        let mut s = Session::new(Document::from_text("Original text."));
+        s.run("file.versions", &json!({"save": "before"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "readOnly", "password": "pw"})).unwrap();
+        // The protection is stopped, with its password, and the version restored after that.
+        s.run("review.restrict", &json!({"stop": true, "password": "pw"})).unwrap();
+        assert!(s.doc.settings.protection.is_none());
+        s.run("file.versions", &json!({"restore": 0})).unwrap();
+        assert!(s.doc.settings.protection.is_none(), "the restore brought the protection back");
+        assert!(s.doc.settings.protect_hash.is_empty(), "the restore brought the password back");
+        assert_eq!(s.doc.plain_text(StoryRef::Body), "Original text.");
+    }
+
+    /// A document-wide change that isn't tracked — the properties, the privacy options — is
+    /// refused while the document is protected: under tracked changes it would change the
+    /// document with no revision to show for it, and under the other modes the document may not
+    /// change at all.
+    #[test]
+    fn a_document_wide_change_that_is_not_tracked_is_refused_under_protection() {
+        for mode in ["readOnly", "forms", "comments", "trackedChanges"] {
+            for (id, params) in [("file.properties", json!({"title": "Forged title"})), ("file.privacyOptions", json!({"removePersonalInfo": true}))]
+            {
+                let mut s = Session::new(Document::from_text("Some text."));
+                s.run("review.restrict", &json!({"mode": mode})).unwrap();
+                let before = s.doc.clone();
+                let e = s.run(id, &params).unwrap_err().to_string();
+                assert!(e.contains("stop protection"), "{mode} {id}: {e}");
+                assert_eq!(s.doc, before, "{mode} {id}: the document changed");
+            }
+        }
+        // Without protection they work.
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("file.properties", &json!({"title": "A title"})).unwrap();
+        assert_eq!(s.doc.core.title, "A title");
+        s.run("file.privacyOptions", &json!({"removePersonalInfo": true})).unwrap();
+        assert!(s.doc.settings.remove_personal_info);
+    }
+
+    /// A file command that changes the document is checked like any other: the privacy options,
+    /// the properties and the inspector's removals are refused in every mode a protected document
+    /// can be in (#1327 follow-up).
+    #[test]
+    fn file_commands_that_change_the_document_are_protected() {
+        for mode in ["readOnly", "forms", "comments", "trackedChanges"] {
+            for (id, params) in [
+                ("file.privacyOptions", json!({"removePersonalInfo": true})),
+                ("file.properties", json!({"title": "New title"})),
+                ("file.inspect", json!({"remove": ["comments"]})),
+            ] {
+                let mut s = Session::new(Document::from_text("Some text."));
+                s.run("review.restrict", &json!({"mode": mode})).unwrap();
+                let before = s.doc.clone();
+                assert!(s.run(id, &params).is_err(), "{mode} {id}: a protected document took the change");
+                assert_eq!(s.doc, before, "{mode} {id}");
+            }
+        }
+        // Without protection they work.
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("file.inspect", &json!({"remove": ["comments"]})).unwrap();
+    }
+
+    /// The user name is the identity a named exception range is checked against, and the author
+    /// the new revisions and comments are recorded under: a protected document refuses to change
+    /// it (#1327 follow-up).
+    #[test]
+    fn the_user_name_cannot_change_under_protection() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        let author = s.author.clone();
+        let e = s.run("file.setAuthor", &json!({"name": "Alice"})).unwrap_err().to_string();
+        assert!(e.contains("stop protection"), "{e}");
+        assert_eq!(s.author, author, "the user name did not change");
+        // Without protection it works again.
+        s.run("review.restrict", &json!({"stop": true})).unwrap();
+        s.run("file.setAuthor", &json!({"name": "Alice"})).unwrap();
+        assert_eq!(s.author, "Alice");
+    }
+
+    /// The protection of a protected document doesn't change: Word asks for Stop Protection first,
+    /// and only the explicit way stops it — a command that merely names a mode can't strip it
+    /// (#1327 follow-up).
+    #[test]
+    fn a_protected_documents_protection_needs_an_explicit_stop() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        // The "none" shorthand stops the protection: refused, and the protection stays.
+        let e = s.run("file.protect", &json!({"mode": "none"})).unwrap_err().to_string();
+        assert!(e.contains("stop protection"), "{e}");
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("readOnly"));
+        // Changing the mode of a protected document is refused too.
+        let e = s.run("review.restrict", &json!({"mode": "comments"})).unwrap_err().to_string();
+        assert!(e.contains("stop protection"), "{e}");
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("readOnly"));
+        // Stopping it explicitly works.
+        s.run("review.restrict", &json!({"stop": true})).unwrap();
+        assert!(s.doc.settings.protection.is_none());
+    }
+
+    /// A password-protected document still needs its password to stop, and the formatting-only
+    /// protection (the mode "none") is still how the styles are limited.
+    #[test]
+    fn a_password_guards_the_protection_and_the_formatting_only_path_still_works() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "readOnly", "password": "pw"})).unwrap();
+        assert!(s.run("review.restrict", &json!({"stop": true, "password": "wrong"})).is_err());
+        assert!(s.run("review.restrict", &json!({"stop": true})).is_err());
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("readOnly"));
+        // The formatting-only protection: the mode "none" with the formatting restriction.
+        let mut t = Session::new(Document::from_text("Some text."));
+        t.run("review.restrict", &json!({"mode": "none", "formatting": true})).unwrap();
+        assert_eq!(t.doc.settings.protection.as_deref(), Some("none"));
+        assert!(t.doc.settings.protect_formatting);
+    }
+
+    /// A password guards the protection whatever its mode: a formatting-only protection with a
+    /// password can't have that password replaced (and then removed) without knowing it.
+    #[test]
+    fn a_password_guards_the_formatting_only_protection_too() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "none", "formatting": true, "password": "pw"})).unwrap();
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("none"));
+        let hash = s.doc.settings.protect_hash.clone();
+        assert!(!hash.is_empty(), "the password is set");
+        // Replacing the protection would replace the password with one of the caller's choosing.
+        assert!(s.run("review.restrict", &json!({"mode": "readOnly", "password": "other"})).is_err());
+        assert_eq!(s.doc.settings.protect_hash, hash, "the password was replaced");
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("none"), "the protection was replaced");
+        // And stopping it needs the password.
+        assert!(s.run("review.restrict", &json!({"stop": true})).is_err());
+        assert!(s.run("review.restrict", &json!({"stop": true, "password": "wrong"})).is_err());
+        assert_eq!(s.doc.settings.protection.as_deref(), Some("none"), "the protection was stopped");
+        s.run("review.restrict", &json!({"stop": true, "password": "pw"})).unwrap();
+        assert!(s.doc.settings.protection.is_none());
+    }
+
+    /// The settings and the metadata of a protected document are part of what stays as it was:
+    /// a command that changes them is refused, or rolled back, like any other change outside
+    /// the editable regions (#1327 follow-up).
+    #[test]
+    fn a_protected_document_keeps_its_settings_and_metadata() {
+        let mut s = Session::new(Document::from_text("Locked intro.\nFill in here."));
+        select(&mut s, "Fill in here.");
+        s.run("review.restrict", &json!({"exception": "add"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        let before = s.doc.clone();
+        // The properties: the change is refused, and the command says why.
+        let e = s.run("file.properties", &json!({"title": "Forged title"})).unwrap_err().to_string();
+        assert!(e.contains("stop protection"), "{e}");
+        assert_eq!(s.doc, before);
+        assert_ne!(s.doc.core.title, "Forged title");
+        // A custom property too.
+        assert!(s.run("file.properties", &json!({"custom": {"Owner": "Alice"}})).is_err());
+        assert_eq!(s.doc, before);
+        // An edit inside the exception still works, and isn't rolled back.
+        select(&mut s, "here");
+        s.run("text.insert", &json!({"text": "there"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).contains("Fill in there."));
+        // Without protection the same command works.
+        let mut t = Session::new(Document::from_text("Some text."));
+        t.run("file.properties", &json!({"title": "A title"})).unwrap();
+        assert_eq!(t.doc.core.title, "A title");
+    }
+
+    /// Reading the document stays allowed under protection: the inspector without removals, the
+    /// privacy settings, the info, and saving a version snapshot.
+    #[test]
+    fn file_commands_that_only_read_stay_allowed() {
+        let mut s = Session::new(Document::from_text("Some text."));
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        for (id, params) in
+            [("file.inspect", json!({})), ("file.privacy", json!({})), ("file.info", json!({})), ("file.versions", json!({"save": "snapshot"}))]
+        {
+            assert!(s.run(id, &params).is_ok(), "{id}: a protected document refused a read");
+        }
+    }
+
+    /// The post-check compares the document's settings and its metadata, so a command that
+    /// changed either is rolled back even where the command itself isn't refused — the
+    /// backstop behind the refusal the properties and the privacy options get.
+    #[test]
+    fn the_post_check_compares_the_settings_and_the_metadata() {
+        let before = Document::from_text("Some text.");
+        let mut after = before.clone();
+        after.core.title = "Forged".into();
+        assert!(!super::outside_unchanged(&before, &after, "someone"), "the metadata isn't compared");
+        let mut after = before.clone();
+        after.settings.remove_personal_info = true;
+        assert!(!super::outside_unchanged(&before, &after, "someone"), "the settings aren't compared");
+        assert!(super::outside_unchanged(&before, &before.clone(), "someone"), "an unchanged document isn't unchanged");
+    }
+
+    /// Read only, no exceptions: going to a header the document doesn't have doesn't create
+    /// one, and loading or filtering recipients doesn't rewrite the merge fields' shown results
+    /// (both used to change the document from a non-mutating command, #1327).
+    #[test]
+    fn read_only_navigation_and_recipients_leave_the_document_alone() {
+        let mut s = Session::new(Document::from_text("Dear name,"));
+        select(&mut s, "name");
+        s.run("mailings.insertField", &json!({"field": "Name"})).unwrap();
+        s.run("mailings.recipients", &json!({"rows": [{"Name": "Ada"}, {"Name": "Bob"}]})).unwrap();
+        s.run("mailings.preview", &json!({"value": true})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).contains("Ada"));
+        s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
+        let (before, depth) = (s.doc.clone(), s.undo_depth());
+        assert!(s.run("insert.editHeader", &json!({})).is_err());
+        assert!(s.run("insert.editFooter", &json!({})).is_err());
+        s.run("mailings.recipients", &json!({"rows": [{"Name": "Cyd"}]})).unwrap();
+        s.run("mailings.filterRecipients", &json!({"rules": [{"field": "Name", "op": "equal", "value": "Cyd"}]})).unwrap();
+        s.run("mailings.sortRecipients", &json!({"field": "Name", "descending": true})).unwrap();
+        s.run("mailings.editRecipients", &json!({"rows": [{"Name": "Dee"}]})).unwrap();
+        assert!(s.run("mailings.next", &json!({})).is_err());
+        assert_eq!(s.doc, before);
+        assert_eq!(s.undo_depth(), depth);
+    }
+
     #[test]
     fn forms_mode_allows_edits_only_inside_fillable_controls() {
         let mut s = Session::new(Document::from_text("Locked intro.\nPick size.\nFill name.\nLocked end."));
@@ -454,6 +1061,57 @@ mod tests {
         assert!(s.run("text.insert", &json!({"text": "x"})).is_err());
         assert!(s.run("format.bold", &json!({})).is_err());
         assert_eq!(s.doc.plain_text(StoryRef::Body), before);
+    }
+
+    /// While Filling in forms is enforced, Word offers no Remove Content Control and greys out the
+    /// Developer tab's control buttons and Properties. WordCraft removed a fillable control (its
+    /// content left as plain text), inserted new controls inside one, and renamed one.
+    #[test]
+    fn forms_mode_keeps_its_controls() {
+        let mut s = Session::new(Document::from_text("Name: Fill name."));
+        select(&mut s, "Fill name.");
+        s.run("developer.richText", &json!({"tag": "name"})).unwrap();
+        s.run("review.restrict", &json!({"mode": "forms"})).unwrap();
+        let before = s.doc.clone();
+        assert!(s.run("developer.removeControl", &json!({"control": "name"})).is_err(), "by tag");
+        select(&mut s, "Fill");
+        let e = s.run("developer.removeControl", &json!({})).unwrap_err().to_string();
+        assert!(e.contains("stop protection"), "at the caret: {e}");
+        assert_eq!(s.doc, before);
+        // No new control inside the field, and no property changes.
+        for insert in CONTROL_INSERTS {
+            assert!(s.run(insert, &json!({})).is_err(), "{insert}");
+        }
+        assert!(s.run("developer.properties", &json!({"control": "name", "tag": "other"})).is_err(), "tag");
+        assert_eq!(s.doc, before);
+        // Filling it is still allowed.
+        s.run("text.insert", &json!({"text": "Ada"})).unwrap();
+        assert_eq!(s.doc.control_ranges(StoryRef::Body).len(), 1);
+        // Once protection stops, the control can go.
+        s.run("review.restrict", &json!({"stop": true})).unwrap();
+        s.run("developer.removeControl", &json!({"control": "name"})).unwrap();
+        assert!(s.doc.control_ranges(StoryRef::Body).is_empty());
+    }
+
+    /// The ribbon greys out what forms mode refuses outright (as Word for Mac does), and only that:
+    /// typing into the field and the rest of the ribbon stay live.
+    #[test]
+    fn forms_mode_greys_out_the_control_commands() {
+        let mut s = Session::new(Document::from_text("Name: Fill name."));
+        select(&mut s, "Fill name.");
+        s.run("developer.richText", &json!({"tag": "name"})).unwrap();
+        let greyed = ["developer.removeControl", "developer.properties"].into_iter().chain(CONTROL_INSERTS);
+        assert!(greyed.clone().all(|id| s.why_disabled(id).is_none()), "unprotected");
+        s.run("review.restrict", &json!({"mode": "forms"})).unwrap();
+        for id in greyed {
+            let why = s.why_disabled(id).unwrap_or_default();
+            assert!(why.contains("stop protection"), "{id}: {why:?}");
+        }
+        for id in ["text.insert", "format.bold", "review.restrict", "view.zoom"] {
+            assert_eq!(s.why_disabled(id), None, "{id}");
+        }
+        s.run("review.restrict", &json!({"stop": true})).unwrap();
+        assert_eq!(s.why_disabled("developer.removeControl"), None);
     }
 
     #[test]
@@ -495,7 +1153,8 @@ mod tests {
     /// Word blocks content-control property edits until Stop Protection: while any restriction
     /// is enforced, `developer.properties` refuses to change a control's lock flags — the
     /// presence of `lockEdit`/`lockDelete` is the trigger, whatever their value (absent, they
-    /// keep the current lock). Other properties (title, tag…) stay editable.
+    /// keep the current lock). Under Filling in forms every property is refused (Word greys
+    /// Properties out); under the other modes the title and tag stay editable.
     #[test]
     fn lock_property_changes_are_refused_under_protection() {
         let mut s = Session::new(Document::from_text("Fill [pick] now."));
@@ -506,10 +1165,9 @@ mod tests {
         assert!(s.run("developer.properties", &json!({"control": "free", "lockEdit": true})).is_err(), "lockEdit: true");
         assert!(s.run("developer.properties", &json!({"control": "free", "lockDelete": true})).is_err(), "lockDelete: true");
         assert!(s.run("developer.properties", &json!({"control": "free", "lockEdit": false})).is_err(), "lockEdit: false");
-        // Other properties still work, and the control stays fillable.
-        s.run("developer.properties", &json!({"control": "free", "title": "Renamed"})).unwrap();
-        let titled = s.doc.control_ranges(StoryRef::Body).iter().find(|r| r.control.tag == "free").map(|r| r.control.title.clone());
-        assert_eq!(titled, Some("Renamed".into()));
+        // Under forms protection the other properties are refused too.
+        assert!(s.run("developer.properties", &json!({"control": "free", "title": "Renamed"})).is_err(), "title");
+        assert_eq!(s.doc.fillable_controls(), 1);
         // Any enforced mode refuses it too: read only, even with an exception that allows edits.
         s.run("review.restrict", &json!({"stop": true})).unwrap();
         select(&mut s, "now");
@@ -665,6 +1323,8 @@ mod tests {
         assert_eq!(start, first.content_start(), "wraps round to the first control");
         assert_eq!(end, first.end);
         // Without forms mode, Find Next Region is about perm ranges: none here, nothing to find.
+        // (The protection is stopped first: the mode of a protected document doesn't change.)
+        s.run("review.restrict", &json!({"stop": true})).unwrap();
         s.run("review.restrict", &json!({"mode": "readOnly"})).unwrap();
         assert_eq!(next_region(&s, &s.doc.start_of(StoryRef::Body)), None);
     }
