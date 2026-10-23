@@ -41,8 +41,25 @@ struct App(
     #[cfg(target_os = "macos")] fmv_macos_events::Inbox,
 );
 
+/// Subpixel (ClearType-style) interface text on a Windows screen under 175 % scaling, where grey
+/// anti-aliased text looks soft; decided once, on the first frame, before any glyph is drawn.
+/// `WORDCRAFT_CLEARTYPE=0` turns it off, `=1` on (vendor/README.md).
+fn subpixel_text(ctx: &egui::Context) {
+    static DECIDED: std::sync::Once = std::sync::Once::new();
+    DECIDED.call_once(|| {
+        let on = match std::env::var("WORDCRAFT_CLEARTYPE").as_deref() {
+            Ok("0") => false,
+            Ok("1") => true,
+            _ => cfg!(target_os = "windows") && ctx.pixels_per_point() < 1.75,
+        };
+        log::info!("interface text: {}", if on { "subpixel (ClearType-style)" } else { "grey anti-aliasing" });
+        egui::epaint::text::set_subpixel_text(on);
+    });
+}
+
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        subpixel_text(ctx);
         #[cfg(target_os = "macos")]
         apple_events::poll(&self.4, &mut self.0, ctx);
         self.0.logic(ctx);
