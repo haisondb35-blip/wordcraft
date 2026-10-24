@@ -1,0 +1,17 @@
+# brian-local rows for hu that craft-i18n does not carry yet (merged into the
+# craft-i18n catalogs at build time by _tools/package-all.ps1). Same columns as craft-i18n.
+	Spelling and grammar are checked in English (United States).	A helyesírás- és nyelvhelyesség-ellenőrzés nyelve: angol (Egyesült Államok).
+	Checking sign-in…	Bejelentkezés ellenőrzése…
+	Signed in:	Bejelentkezve:
+	Not signed in	Nincs bejelentkezve
+	Not installed	Nincs telepítve
+	Sign-in unknown	A bejelentkezés állapota ismeretlen
+	Sign in	Bejelentkezés
+	Check the sign-in again	Bejelentkezés újbóli ellenőrzése
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Kérje meg az asszisztenst, hogy írjon, írjon át vagy formázzon szöveget, vagy ellenőrizze a dokumentumot. A módosítások menet közben megjelennek a dokumentumban, és visszavonhatók.
+	Working…	Dolgozik…
+	Ask a question…	Tegyen fel egy kérdést…
+	AI Assistant	MI-asszisztens
+	Send	Küldés
+	New chat	Új csevegés
+	Install	Telepítés

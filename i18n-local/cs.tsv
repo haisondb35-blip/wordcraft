@@ -1,0 +1,17 @@
+# brian-local rows for cs that craft-i18n does not carry yet (merged into the
+# craft-i18n catalogs at build time by _tools/package-all.ps1). Same columns as craft-i18n.
+	Spelling and grammar are checked in English (United States).	Pravopis a mluvnice se kontrolují v angličtině (Spojené státy).
+	Checking sign-in…	Kontrola přihlášení…
+	Signed in:	Přihlášeno:
+	Not signed in	Nepřihlášeno
+	Not installed	Není nainstalováno
+	Sign-in unknown	Stav přihlášení není známý
+	Sign in	Přihlásit se
+	Check the sign-in again	Znovu zkontrolovat přihlášení
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Požádejte asistenta, aby napsal, přepsal nebo naformátoval text nebo zkontroloval dokument. Změny se v dokumentu objevují průběžně a lze je vrátit zpět.
+	Working…	Pracuje…
+	Ask a question…	Položte otázku…
+	AI Assistant	AI asistent
+	Send	Odeslat
+	New chat	Nová konverzace
+	Install	Nainstalovat

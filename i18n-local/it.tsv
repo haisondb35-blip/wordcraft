@@ -1,0 +1,17 @@
+# brian-local rows for it that craft-i18n does not carry yet (merged into the
+# craft-i18n catalogs at build time by _tools/package-all.ps1). Same columns as craft-i18n.
+	Spelling and grammar are checked in English (United States).	L'ortografia e la grammatica vengono controllate in inglese (Stati Uniti).
+	Checking sign-in…	Verifica dell'accesso…
+	Signed in:	Accesso eseguito:
+	Not signed in	Accesso non eseguito
+	Not installed	Non installato
+	Sign-in unknown	Stato dell'accesso sconosciuto
+	Sign in	Accedi
+	Check the sign-in again	Verifica di nuovo l'accesso
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Chiedi all'assistente di scrivere, riscrivere o formattare il testo, oppure di controllare il documento. Le modifiche compaiono nel documento man mano e si possono annullare.
+	Working…	In corso…
+	Ask a question…	Fai una domanda…
+	AI Assistant	Assistente IA
+	Send	Invia
+	New chat	Nuova chat
+	Install	Installa

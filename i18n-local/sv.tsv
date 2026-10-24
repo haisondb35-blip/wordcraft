@@ -1,0 +1,17 @@
+# brian-local rows for sv that craft-i18n does not carry yet (merged into the
+# craft-i18n catalogs at build time by _tools/package-all.ps1). Same columns as craft-i18n.
+	Spelling and grammar are checked in English (United States).	Stavning och grammatik kontrolleras på engelska (USA).
+	Checking sign-in…	Kontrollerar inloggningen…
+	Signed in:	Inloggad:
+	Not signed in	Inte inloggad
+	Not installed	Inte installerad
+	Sign-in unknown	Okänd inloggningsstatus
+	Sign in	Logga in
+	Check the sign-in again	Kontrollera inloggningen igen
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Be assistenten att skriva, skriva om eller formatera text, eller granska dokumentet. Ändringarna visas i dokumentet medan de görs och kan ångras.
+	Working…	Arbetar…
+	Ask a question…	Ställ en fråga…
+	AI Assistant	AI-assistent
+	Send	Skicka
+	New chat	Ny chatt
+	Install	Installera

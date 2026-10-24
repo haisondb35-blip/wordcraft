@@ -1,0 +1,17 @@
+# brian-local rows for ru that craft-i18n does not carry yet (merged into the
+# craft-i18n catalogs at build time by _tools/package-all.ps1). Same columns as craft-i18n.
+	Spelling and grammar are checked in English (United States).	Орфография и грамматика проверяются для английского языка (США).
+	Checking sign-in…	Проверка входа…
+	Signed in:	Выполнен вход:
+	Not signed in	Вход не выполнен
+	Not installed	Не установлено
+	Sign-in unknown	Состояние входа неизвестно
+	Sign in	Войти
+	Check the sign-in again	Проверить вход ещё раз
+	Ask the assistant to write, rewrite or format text, or check the document. Changes appear in the document as it makes them and can be undone.	Попросите помощника написать, переписать или оформить текст либо проверить документ. Изменения появляются в документе по мере их внесения, и их можно отменить.
+	Working…	Выполняется…
+	Ask a question…	Задайте вопрос…
+	AI Assistant	ИИ-помощник
+	Send	Отправить
+	New chat	Новый чат
+	Install	Установить
