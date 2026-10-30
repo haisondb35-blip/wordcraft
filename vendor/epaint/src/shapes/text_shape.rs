@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use emath::{Align2, Rot2};
 
@@ -148,6 +148,8 @@ impl TextShape {
             let text::Row {
                 section_index_at_start: _,
                 glyphs: _, // TODO(emilk): would it make sense to transform these?
+                rtl_paragraph: _,
+                visual_order: _,
                 size,
                 visuals,
             } = Arc::make_mut(row);
@@ -201,7 +203,7 @@ mod tests {
 
         // 90 degree rotation
         if let Shape::Text(ts) = &mut t {
-            ts.angle = core::f32::consts::PI / 2.0;
+            ts.angle = core::f32::consts::PI * 0.5;
         }
 
         let size_rot = t.visual_bounding_rect().size();

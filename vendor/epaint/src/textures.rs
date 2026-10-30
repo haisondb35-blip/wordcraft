@@ -335,7 +335,9 @@ impl TexturesDelta {
 impl Drop for TexturesDelta {
     fn drop(&mut self) {
         debug_assert!(
-            self.is_empty(),
+            // Preserve an in-flight application/test panic. A second panic from Drop would
+            // abort the process and hide the original UI failure instead of diagnosing it.
+            self.is_empty() || std::thread::panicking(),
             "Dropped TexturesDelta with {} unapplied deltas. Deltas need to be handled. \
             If you want to drop this intentionally call `clear` before dropping.",
             self.free.len() + self.set.len()
@@ -376,5 +378,37 @@ impl core::fmt::Debug for TexturesDelta {
             debug_struct.field("free", &self.free);
         }
         debug_struct.finish()
+    }
+}
+
+#[cfg(all(test, panic = "unwind"))]
+mod drop_tests {
+    #![expect(clippy::disallowed_methods)] // These regressions exercise unwinding itself.
+
+    use super::TexturesDelta;
+
+    #[test]
+    fn pending_texture_deltas_preserve_the_original_unwind() {
+        let result = std::panic::catch_unwind(|| {
+            let mut delta = TexturesDelta::default();
+            delta.free.insert(crate::TextureId::Managed(42));
+            panic!("original UI failure");
+        });
+        let payload = result.expect_err("the original panic must still propagate");
+        assert_eq!(payload.downcast_ref::<&str>(), Some(&"original UI failure"));
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn pending_texture_deltas_still_reject_an_ordinary_unhandled_drop() {
+        let result = std::panic::catch_unwind(|| {
+            let mut delta = TexturesDelta::default();
+            delta.free.insert(crate::TextureId::Managed(42));
+            drop(delta);
+        });
+        assert!(
+            result.is_err(),
+            "normal drops must still enforce renderer ownership"
+        );
     }
 }
