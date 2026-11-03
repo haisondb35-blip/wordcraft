@@ -81,6 +81,8 @@ pollster = "1"
 # Pictures and copied files on the system clipboard (#45); egui's paste only carries text. Already
 # in the build through egui-winit, with the same features.
 arboard = { workspace = true, features = ["image-data"] }
+# The clipboard as every Craft app reads and writes it (crates/craft-clipboard, shared).
+craft-clipboard = { path = "../../crates/craft-clipboard" }
 # The control server's random key.
 getrandom = "0.3"
 

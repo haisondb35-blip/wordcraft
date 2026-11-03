@@ -45,9 +45,69 @@ pub fn set_html(html: &str, text: &str, mathml: &str) -> bool {
     if set && !mathml.is_empty() && mathml.len() <= MAX_PASTE_BYTES {
         platform::add_mathml(mathml);
     }
+    if set {
+        ours::remember();
+    }
     set
 }
 
+/// Windows: the copy goes out in the formats every Craft app and other program reads (the shared
+/// craft-clipboard crate): HTML and text, and a copy that is one picture alone as a picture too (PNG
+/// and bitmaps), so photo and paint programs paste it.
+#[cfg(target_os = "windows")]
+fn set_html_text(html: &str, text: &str) -> bool {
+    let copy = craft_clipboard::Copy {
+        text: (!text.is_empty()).then(|| text.to_string()),
+        html: Some(html.to_string()),
+        png: lone_picture_png(html, text),
+        ..Default::default()
+    };
+    craft_clipboard::write(&copy).map_err(|e| log::warn!("clipboard: {e}")).is_ok()
+}
+
+/// The picture of a copy that is one picture and no text, as PNG.
+#[cfg(target_os = "windows")]
+fn lone_picture_png(html: &str, text: &str) -> Option<Vec<u8>> {
+    if !text.trim_matches(|c: char| c.is_whitespace() || c == '\u{FFFC}').is_empty() {
+        return None;
+    }
+    let mut pictures = craft_clipboard::media::local_pictures(html);
+    if pictures.len() != 1 {
+        return None;
+    }
+    let (mime, data) = pictures.remove(0);
+    if mime == craft_clipboard::media::PNG {
+        return Some(data);
+    }
+    craft_clipboard::dib::png(&craft_clipboard::dib::decode_png(&data)?)
+}
+
+/// Whether the clipboard still holds WordCraft's last copy: Paste then takes WordCraft's own copy
+/// (every property kept), not the HTML or picture it put there for other programs. Windows counts
+/// clipboard changes; elsewhere the engine tells by the text.
+mod ours {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static LAST: AtomicU32 = AtomicU32::new(0);
+
+    pub fn remember() {
+        #[cfg(target_os = "windows")]
+        LAST.store(craft_clipboard::sequence().unwrap_or(0), Ordering::Relaxed);
+    }
+
+    pub fn holds() -> bool {
+        let last = LAST.load(Ordering::Relaxed);
+        #[cfg(target_os = "windows")]
+        return last != 0 && craft_clipboard::sequence() == Some(last);
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (last, Ordering::Relaxed);
+            false
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
 fn set_html_text(html: &str, text: &str) -> bool {
     WRITER.with(|w| {
         let Ok(mut slot) = w.try_borrow_mut() else { return false };
@@ -73,12 +133,18 @@ pub fn text() -> Option<String> {
 
 /// The clipboard's HTML (Windows: the fragment of its "HTML Format"), if not too large.
 pub fn html() -> Option<String> {
+    if ours::holds() {
+        return None;
+    }
     open()?.get().html().ok().filter(|h| h.len() <= MAX_PASTE_BYTES)
 }
 
 /// The clipboard's RTF: Windows ("Rich Text Format") and Wayland (`text/rtf`); not offered by
 /// arboard, so read here.
 pub fn rtf() -> Option<String> {
+    if ours::holds() {
+        return None;
+    }
     let bytes = platform::rtf()?;
     if bytes.len() > MAX_PASTE_BYTES {
         return None;
@@ -98,6 +164,9 @@ pub fn formats() -> Vec<String> {
 /// why (#833). The UI checks the sizes before inserting anything; on Windows they are checked
 /// from the header before anything is decoded (#3623).
 pub fn picture() -> Option<ClipboardPicture> {
+    if ours::holds() {
+        return None;
+    }
     let mut clipboard = match arboard::Clipboard::new() {
         Ok(c) => c,
         Err(e) => {
