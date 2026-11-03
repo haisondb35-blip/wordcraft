@@ -133,18 +133,18 @@ optional = true
 
 [dependencies.eframe]
 version = "0.37.0"
-path = '..\eframe'
+path = '../eframe'
 optional = true
 default-features = false
 
 [dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 default-features = false
 
 [dependencies.egui-wgpu]
 version = "0.37.0"
-path = '..\egui-wgpu'
+path = '../egui-wgpu'
 optional = true
 default-features = false
 
@@ -190,7 +190,7 @@ default-features = false
 
 [dev-dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 features = [
     "default_fonts",
     "monochrome_emoji_fonts",

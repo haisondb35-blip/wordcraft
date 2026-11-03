@@ -80,13 +80,13 @@ optional = true
 
 [dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 features = ["bytemuck"]
 default-features = false
 
 [dependencies.egui-winit]
 version = "0.37.0"
-path = '..\egui-winit'
+path = '../egui-winit'
 optional = true
 default-features = false
 

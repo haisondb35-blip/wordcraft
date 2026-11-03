@@ -139,13 +139,13 @@ version = "0.2.12"
 
 [dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 features = ["bytemuck"]
 default-features = false
 
 [dependencies.egui_glow]
 version = "0.37.0"
-path = '..\egui_glow'
+path = '../egui_glow'
 optional = true
 default-features = false
 
@@ -233,7 +233,7 @@ features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.egui-wgpu]
 version = "0.37.0"
-path = '..\egui-wgpu'
+path = '../egui-wgpu'
 features = [
     "winit",
     "capture",
@@ -243,7 +243,7 @@ default-features = false
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.egui-winit]
 version = "0.37.0"
-path = '..\egui-winit'
+path = '../egui-winit'
 default-features = false
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.egui_system_font_provider]
@@ -291,13 +291,13 @@ version = "1.25"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 features = ["web_file"]
 default-features = false
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.egui-wgpu]
 version = "0.37.0"
-path = '..\egui-wgpu'
+path = '../egui-wgpu'
 features = ["capture"]
 optional = true
 default-features = false

@@ -91,13 +91,13 @@ version = "0.2.12"
 
 [dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 optional = true
 default-features = false
 
 [dependencies.epaint]
 version = "0.37.0"
-path = '..\epaint'
+path = '../epaint'
 features = ["bytemuck"]
 default-features = false
 

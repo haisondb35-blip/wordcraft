@@ -118,7 +118,7 @@ optional = true
 
 [dependencies.egui]
 version = "0.37.0"
-path = '..\egui'
+path = '../egui'
 default-features = false
 
 [dependencies.image]

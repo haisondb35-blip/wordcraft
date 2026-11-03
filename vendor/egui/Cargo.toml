@@ -160,7 +160,7 @@ default-features = false
 
 [dependencies.epaint]
 version = "0.37.0"
-path = '..\epaint'
+path = '../epaint'
 default-features = false
 
 [dependencies.itertools]
