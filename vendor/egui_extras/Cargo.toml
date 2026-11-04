@@ -1,0 +1,64 @@
+# Vendored from the storytold egui fork (https://github.com/storytold/egui, rev 6d518fc7), the
+# same source upstream WordCraft builds egui_extras from, so that it uses the vendored `egui`
+# (one egui in the graph). Unchanged sources; this manifest is written out by hand from the
+# crate's workspace manifest, keeping only what WordCraft uses (no optional loaders/features).
+
+[package]
+edition = "2024"
+rust-version = "1.95"
+name = "egui_extras"
+version = "0.37.0"
+authors = [
+    "Dominik Rössler <dominik@freshx.de>",
+    "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>",
+    "René Rössler <rene@freshx.de>",
+]
+description = "Extra functionality and widgets for the egui GUI library"
+homepage = "https://github.com/emilk/egui"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/emilk/egui"
+
+[lib]
+name = "egui_extras"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Declared so the sources' cfgs are known; none is used (their dependencies are left out).
+all_loaders = []
+datepicker = []
+file = []
+gif = []
+webp = []
+http = []
+image = []
+serde = []
+svg = []
+svg_text = []
+svg_images = []
+syntect = []
+document-features = []
+
+[dependencies.egui]
+version = "0.37.0"
+default-features = false
+
+[dependencies.ahash]
+version = "0.8.12"
+default-features = false
+features = ["no-rng", "std"]
+
+[dependencies.enum-map]
+version = "3.1"
+
+[dependencies.itertools]
+version = "0.15.0"
+
+[dependencies.log]
+version = "0.4.34"
+features = ["std"]
+
+[dependencies.profiling]
+version = "1.0"
+default-features = false

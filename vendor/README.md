@@ -8,3 +8,7 @@
   one coverage per colour channel (`TextOptions::subpixel_text`), text vertices are marked, and the
   wgpu renderer blends each channel on its own (dual-source blending). Changes are marked `LCD:`.
   When the adapter can't do dual-source blending the text falls back to grey anti-aliasing.
+
+- `egui_extras` 0.37.0 from the same rev (sources unchanged; its manifest written out by hand, with
+  only the dependencies WordCraft uses), so that it builds against the vendored `egui`: from git
+  it brought a second `egui` into the graph and its tables took that one's `Ui`.

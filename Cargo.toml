@@ -144,7 +144,7 @@ egui = { path = "vendor/egui" }
 egui-winit = { path = "vendor/egui-winit" }
 egui-wgpu = { path = "vendor/egui-wgpu" }
 egui_glow = { path = "vendor/egui_glow" }
-egui_extras = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_extras = { path = "vendor/egui_extras" }
 egui_kittest = { path = "vendor/egui_kittest" }
 egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
 eframe = { path = "vendor/eframe" }
