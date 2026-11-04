@@ -27,8 +27,12 @@ mod state;
 #[cfg(test)]
 pub(crate) use comments::comment_draft;
 use comments::comments;
-pub(crate) use comments::{CommentDrafts, comment_editor, commit_comment, commit_reply, flush_comment_drafts, has_comment_drafts, reply_editor};
+pub(crate) use comments::{
+    COMMENT_ROWS, CommentDrafts, comment_editor, commit_comment, commit_reply, flush_comment_drafts, has_comment_drafts, reply_editor,
+};
 use host::Content;
+#[cfg(test)]
+pub(crate) use host::apply;
 pub use host::show;
 pub(crate) use host::{dock_command, overlay_open};
 pub(crate) use inspector::describe_props;
@@ -58,6 +62,7 @@ pub enum Pane {
     RestrictEditing,
     /// The AI Assistant: Claude or ChatGPT working on the document.
     Assistant,
+    Proofing,
     Comments,
 }
 
@@ -74,6 +79,7 @@ impl Pane {
             Self::FormatShape => "Format Shape",
             Self::RestrictEditing => "Restrict Editing",
             Self::Assistant => "AI Assistant",
+            Self::Proofing => "Proofing",
             Self::Comments => "Comments",
         }
     }
@@ -90,6 +96,7 @@ impl Pane {
             Self::FormatShape => (Edge::End, 280.0),
             Self::RestrictEditing => (Edge::End, 270.0),
             Self::Assistant => (Edge::End, 340.0),
+            Self::Proofing => (Edge::End, 400.0),
             Self::Comments => (Edge::End, 290.0),
         };
         PaneState::docked(edge, width)
@@ -108,6 +115,7 @@ impl Pane {
             Self::FormatShape => "formatShape",
             Self::RestrictEditing => "restrictEditing",
             Self::Assistant => "assistant",
+            Self::Proofing => "proofing",
             Self::Comments => "comments",
         }
     }
@@ -123,6 +131,7 @@ impl Pane {
         Self::FormatShape,
         Self::RestrictEditing,
         Self::Assistant,
+        Self::Proofing,
         Self::Comments,
     ];
 
@@ -143,7 +152,7 @@ impl Pane {
             Self::FormatShape => Some("view.formatShapePane"),
             Self::Comments => Some("view.commentsPane"),
             Self::Assistant => Some("ui.claudePane"),
-            Self::RestrictEditing => None,
+            Self::RestrictEditing | Self::Proofing => None,
         }
     }
 }
@@ -155,7 +164,7 @@ impl PaneContent<Pane> for Content<'_> {
 
     fn body(&mut self, ui: &mut Ui, pane: &Pane) {
         let app = &mut *self.app;
-        match pane {
+        crate::rtl::root(ui, |ui| match pane {
             Pane::SmartArtText => crate::dialogs_smart_art::text_pane(app, ui),
             Pane::Navigation => nav(app, ui),
             Pane::Clipboard => clipboard(app, ui),
@@ -168,8 +177,9 @@ impl PaneContent<Pane> for Content<'_> {
             }
             Pane::RestrictEditing => crate::dialogs_review::restrict_pane(app, ui),
             Pane::Assistant => crate::assistant::pane(app, ui),
+            Pane::Proofing => crate::proofing_pane::show(app, ui),
             Pane::Comments => comments(app, ui),
-        }
+        })
     }
 
     fn default_state(&self, pane: &Pane) -> PaneState {
