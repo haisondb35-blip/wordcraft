@@ -2732,7 +2732,7 @@ fn copying_a_picture_hands_its_html_to_the_host() {
     let sink = got.clone();
     let ctx = egui::Context::default();
     let mut a = typed();
-    a.services.set_clipboard_html = Some(Box::new(move |h, t, _| {
+    a.services.set_clipboard_rich = Some(Box::new(move |t, h, _, _| {
         sink.borrow_mut().push((h.to_string(), t.to_string()));
         true
     }));

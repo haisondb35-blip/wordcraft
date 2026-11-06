@@ -77,7 +77,7 @@ pub(crate) fn put(app: &WordApp, ctx: &egui::Context, text: &str, html: &str, rt
         // lone picture as a picture) in place of everything on the clipboard, so other programs
         // paste it; without one, the clipboard's text is emptied, else Paste would find the text
         // copied before it and paste that instead of our copy.
-        if !html.is_empty() && !app.services.set_clipboard_html.as_ref().is_some_and(|f| f(html, text, mathml)) {
+        if !html.is_empty() && !app.services.set_clipboard_rich.as_ref().is_some_and(|f| f(text, html, rtf, mathml)) {
             ctx.copy_text(String::new());
         }
         return;
