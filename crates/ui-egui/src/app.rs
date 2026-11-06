@@ -200,6 +200,12 @@ impl WordApp {
         // Each file's conversation with the assistant is remembered, in the folder all the Craft
         // apps share (ArtCraft/AI).
         self.assistant.use_memory(if std::env::var_os("WORDCRAFT_NO_PREFS").is_none() { crate::assistant::Store::shared() } else { None });
+        // Save chat with file: the document's conversation goes into it as it is saved, and comes back.
+        if self.assistant.memory.is_some() {
+            self.assistant.embedded_reader = Some(crate::assistant::embed::read);
+            let shelf = self.assistant.shelf.clone();
+            wordcraft_engine::io::set_save_hook(Box::new(move |path, bytes| crate::assistant::embed::hook(&shelf, path, bytes)));
+        }
         self
     }
 

@@ -36,6 +36,8 @@ impl WordApp {
     /// Drains queued control requests, dispatches each through `control::handle`, sends its reply or
     /// admits a screenshot, then puts the receiver back.
     pub(super) fn drain_control(&mut self, ctx: &egui::Context) {
+        // Open from the start and listed for the other Craft apps (once).
+        self.assistant.share(ctx);
         // The Claude pane's own channel, then the `--control` one.
         if let Some(rx) = self.assistant.control_rx.take() {
             self.drain_from(&rx, ctx);

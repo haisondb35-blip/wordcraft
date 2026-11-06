@@ -813,8 +813,26 @@ fn only_case_differs(source: &std::path::Path, destination: &std::path::Path) ->
 }
 
 /// Write `bytes` to the file at `path`, inside the automation write root when there is one.
+/// Changes the bytes of a file about to be saved, or None to keep them: the desktop app's Save
+/// chat with file (the assistant's conversation, written into the file).
+pub type SaveHook = Box<dyn Fn(&str, &[u8]) -> Option<Vec<u8>> + Send + Sync>;
+
+static SAVE_HOOK: std::sync::OnceLock<SaveHook> = std::sync::OnceLock::new();
+
+/// Sets the [`SaveHook`] (once per run).
+pub fn set_save_hook(hook: SaveHook) {
+    let _ = SAVE_HOOK.set(hook);
+}
+
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+fn hooked(path: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+    SAVE_HOOK.get().and_then(|h| h(path, bytes))
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
+    let hooked = hooked(path, bytes);
+    let bytes = hooked.as_deref().unwrap_or(bytes);
     crate::file_access::check_write(path)?;
     // Like a document save: the old file is replaced only once the new bytes are fully written.
     safe_save::write(std::path::Path::new(path), bytes).map_err(|e| format!("{path}: {e}"))
@@ -844,6 +862,7 @@ pub fn save_path(path: &std::path::Path, doc: &Document) -> Result<(), String> {
 pub fn save_path_with(path: &std::path::Path, doc: &Document, password: Option<&str>, opts: &ExportOptions) -> Result<(), String> {
     crate::file_access::check_write(&path.to_string_lossy())?;
     let bytes = save_bytes_with(&path.to_string_lossy(), doc, password, opts)?;
+    let bytes = hooked(&path.to_string_lossy(), &bytes).unwrap_or(bytes);
     safe_save::write(path, &bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
