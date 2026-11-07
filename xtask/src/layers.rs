@@ -33,6 +33,8 @@ impl Class {
 /// The layering table. Names are package names without the `wordcraft-`
 /// prefix.
 pub const TABLE: &[(&str, Class)] = &[
+    // The system clipboard shared by every Craft app: a leaf, used only by the app.
+    ("craft-clipboard", Class::Layer(0)),
     ("geom", Class::Layer(0)),
     ("control-key", Class::Standalone),
     ("doc", Class::Layer(1)),
