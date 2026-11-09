@@ -138,7 +138,13 @@ pub fn start_with_key(ctx: egui::Context, key: String) -> Option<(u16, Receiver<
     };
     let port = listener.local_addr().ok()?.port();
     log::info!("Claude pane control channel on 127.0.0.1:{port}");
-    Some((port, serve_on(listener, ctx, key, FIRST_REQUEST)))
+    match serve_on(listener, ctx, key, FIRST_REQUEST) {
+        Ok(rx) => Some((port, rx)),
+        Err(e) => {
+            log::error!("Claude pane: control channel not opened: {e}");
+            None
+        }
+    }
 }
 
 /// A new key: 32 random bytes from the operating system, as hex.
