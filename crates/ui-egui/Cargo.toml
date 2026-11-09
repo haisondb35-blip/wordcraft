@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 # The synced cloud folder every Craft app shares (crates/craft-sync): iCloud Drive and the others.
 craft-sync = { path = "../craft-sync" }
+# The assistant saves its chat inside a .docx (`assistant/embed.rs`).
+zip = { workspace = true }
 craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 # Interface translations: lookup, fallback, plurals and system-locale matching over the craft-i18n
 # catalogs that `build.rs` embeds from `CRAFT_I18N_DIR` (storytold/craft-i18n, pinned in
