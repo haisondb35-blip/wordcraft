@@ -23,7 +23,7 @@ pub mod embed;
 mod memory;
 pub use memory::{Memory, Store};
 
-use crate::control::ControlRequest;
+use craft::automation::control::ControlRequest;
 
 /// Starts a control channel for the pane: given the token requests must carry, the port it
 /// listens on (127.0.0.1) and the requests it receives. The desktop app provides it.
@@ -330,7 +330,7 @@ impl Drop for Assistant {
     }
 }
 
-/// 128 random bits as hex, from the standard library's randomly keyed hasher. Made when the
+/// 256 random bits as hex (the 64 hex digits a control token has), from the standard library's randomly keyed hasher. Made when the
 /// first question is sent, in the desktop app only (the web build has no clock to read and runs
 /// no Claude Code).
 #[allow(clippy::disallowed_methods)]
@@ -344,7 +344,7 @@ fn random_token() -> String {
         h.write_u32(std::process::id());
         h.finish()
     };
-    format!("{:016x}{:016x}", part(1), part(2))
+    format!("{:016x}{:016x}{:016x}{:016x}", part(1), part(2), part(3), part(4))
 }
 
 impl Assistant {
@@ -733,7 +733,7 @@ pub fn mcp_config(cli: &Path, port: u16, token: &str) -> Value {
                 "type": "stdio",
                 "command": cli.to_string_lossy(),
                 "args": ["mcp", "--connect", format!("127.0.0.1:{port}")],
-                "env": { "WORDCRAFT_CONTROL_KEY": token },
+                "env": { "WORDCRAFT_CONTROL_TOKEN": token },
             }
         }
     })
@@ -744,7 +744,7 @@ pub fn mcp_server(cli: &Path, port: u16, token: &str) -> McpServer {
     McpServer {
         command: cli.to_path_buf(),
         args: vec!["mcp".into(), "--connect".into(), format!("127.0.0.1:{port}")],
-        env: vec![("WORDCRAFT_CONTROL_KEY".into(), token.into())],
+        env: vec![("WORDCRAFT_CONTROL_TOKEN".into(), token.into())],
     }
 }
 
@@ -1563,7 +1563,7 @@ mod tests {
         assert!(!a.iter().any(|x| x == "x"), "the prompt goes in on stdin, not the command line");
         let cfg = mcp_config(Path::new("C:/WordCraft/wordcraft-cli.exe"), 4567, "tok");
         assert_eq!(cfg.pointer("/mcpServers/wordcraft/args/2").and_then(Value::as_str), Some("127.0.0.1:4567"));
-        assert_eq!(cfg.pointer("/mcpServers/wordcraft/env/WORDCRAFT_CONTROL_KEY").and_then(Value::as_str), Some("tok"));
+        assert_eq!(cfg.pointer("/mcpServers/wordcraft/env/WORDCRAFT_CONTROL_TOKEN").and_then(Value::as_str), Some("tok"));
     }
 
     /// The pane end to end with a stand-in for Claude Code: the question goes out with the MCP
@@ -1640,7 +1640,7 @@ mod tests {
         let server = McpServer {
             command: PathBuf::from(r"C:\Program Files\App\wordcraft-cli.exe"),
             args: vec!["mcp".into(), "--app".into(), "4242".into()],
-            env: vec![("WORDCRAFT_CONTROL_KEY".into(), "t\"k".into())],
+            env: vec![("WORDCRAFT_CONTROL_TOKEN".into(), "t\"k".into())],
         };
         let l = Launch {
             prompt: "x".into(),
@@ -1660,7 +1660,7 @@ mod tests {
             a.contains(&r#"mcp_servers.wordcraft.default_tools_approval_mode="approve""#.to_string()),
             "the app's tools may change the document: {a:?}"
         );
-        assert!(a.contains(&r#"mcp_servers.wordcraft.env={WORDCRAFT_CONTROL_KEY="t\"k"}"#.to_string()), "{a:?}");
+        assert!(a.contains(&r#"mcp_servers.wordcraft.env={WORDCRAFT_CONTROL_TOKEN="t\"k"}"#.to_string()), "{a:?}");
         assert_eq!(a.last().map(String::as_str), Some("-"), "the prompt comes on stdin");
         assert!(!a.contains(&"resume".to_string()));
         // A conversation goes on with `resume <id>`, before the stdin marker.
@@ -1767,7 +1767,7 @@ mod tests {
     #[test]
     fn tokens_are_long_and_differ() {
         let (a, b) = (random_token(), random_token());
-        assert_eq!(a.len(), 32);
+        assert_eq!(a.len(), 64);
         assert_ne!(a, b);
     }
 }

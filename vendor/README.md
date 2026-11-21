@@ -1,3 +1,7 @@
+> **Not used since the 2026-11-21 upstream merge.** Upstream moved the UI onto the craft framework and the egui fork
+> to rev 7e1c30d1, which these 6d518fc7 copies do not match, so `Cargo.toml` patches the fork from git again and the
+> subpixel text (`WORDCRAFT_CLEARTYPE`) is switched off until it is re-ported onto the new rev. The files stay for that.
+
 # Vendored crates
 
 - `epaint`, `egui`, `egui-winit`, `egui-wgpu`, `egui_glow`, `egui_kittest` and `eframe` 0.37.0, from
