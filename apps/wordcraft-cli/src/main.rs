@@ -377,7 +377,11 @@ const MCP_CONNECT_REFUSED: &str = "mcp: --connect is refused for now: the deskto
      channel to automation roots yet (storytold/wordcraft#3695, #5819). Use the headless server: wordcraft-cli mcp \
      --automation-read-root DIR --automation-write-root DIR";
 
-const MCP_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--connect", takes_value: true }, OptionSpec { name: "--author", takes_value: true }];
+const MCP_OPTIONS: &[OptionSpec] = &[
+    OptionSpec { name: "--connect", takes_value: true },
+    OptionSpec { name: "--bridge", takes_value: true },
+    OptionSpec { name: "--author", takes_value: true },
+];
 const ZOTERO_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--cmd", takes_value: true },
     OptionSpec { name: "--save", takes_value: true },
@@ -439,6 +443,41 @@ fn write_stdout(write: impl FnOnce(&mut std::io::StdoutLock<'static>) -> std::io
 fn script_operand<S: AsRef<OsStr>>(raw: &[S]) -> Option<PathBuf> {
     let at = raw.iter().position(|a| a.as_ref() == OsStr::new("--script"))?;
     raw.get(at + 1).map(|a| PathBuf::from(a.as_ref()))
+}
+
+/// Whether `addr` (`HOST:PORT`, as `--bridge` gives it) is at least shaped like an address: a
+/// host of some kind and a numeric port. Malformed addresses fail at startup — a lazy remote
+/// would otherwise retry one on every call and never say why nothing connects.
+fn valid_connect_addr(addr: &str) -> bool {
+    let Some((host, port)) = addr.rsplit_once(':') else { return false };
+    !host.is_empty() && port.parse::<u16>().is_ok()
+}
+
+/// `mcp --bridge HOST:PORT`: the MCP server bridged to a running app. Only the app's own Claude pane starts it, on
+/// the pane's private control channel (loopback, fresh token per run); `--connect` stays refused for everyone else.
+fn bridge_mcp(rest: &[String]) -> Result<Box<dyn wordcraft_mcp::Backend>, String> {
+    validate_options("mcp", rest, MCP_OPTIONS)?;
+    let addr = arg_value(rest, "--bridge").ok_or_else(|| "mcp: --bridge needs HOST:PORT".to_string())?;
+    if arg_value(rest, "--author").is_some() {
+        return Err("mcp: --author applies to the headless server; with --bridge, run file.setAuthor".into());
+    }
+    if !valid_connect_addr(&addr) {
+        return Err(format!("mcp: --bridge needs HOST:PORT with a numeric port, got `{addr}`"));
+    }
+    Ok(match wordcraft_mcp::Remote::connect(&addr) {
+        Ok(remote) => {
+            eprintln!("wordcraft-cli mcp: connected to WordCraft at {addr}");
+            if let Some(w) = remote.key_warning() {
+                eprintln!("wordcraft-cli: {w}");
+            }
+            Box::new(remote)
+        }
+        // The app may start after the client does: serve anyway and connect on the first call (#4078).
+        Err(e) => {
+            eprintln!("wordcraft-cli mcp: WordCraft is not reachable at {addr} yet ({e}); will retry on each call");
+            Box::new(wordcraft_mcp::Remote::lazy(&addr))
+        }
+    })
 }
 
 /// A failed `--strict` export: a strict refusal becomes [`Failure::Strict`] carrying what stderr
@@ -730,6 +769,11 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
             } else {
                 write_stdout(|o| writeln!(o, "{}", serde_json::to_string_pretty(&p).unwrap_or_default()))
             }
+        }
+        "mcp" if rest.iter().any(|a| a == "--bridge") => {
+            let mut server = wordcraft_mcp::Server::new(bridge_mcp(&rest)?);
+            let stdin = std::io::stdin();
+            Ok(server.serve(stdin.lock(), std::io::stdout())?)
         }
         "mcp" => {
             let (roots, rest) = automation_roots("mcp", &rest)?;

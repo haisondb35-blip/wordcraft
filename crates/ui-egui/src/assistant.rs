@@ -1,7 +1,7 @@
 //! The Claude pane: ask Claude to work on the open presentation, as Copilot does in Office.
 //!
 //! The pane runs Claude Code (`claude`, installed and signed in on this computer) in print mode
-//! with one MCP server, `wordcraft-cli mcp --connect`, attached to this window through a control
+//! with one MCP server, `wordcraft-cli mcp --bridge`, attached to this window through a control
 //! channel of its own: a loopback port chosen by the system and a random token per run, so only
 //! the Claude this pane starts can drive the app. Claude sees and changes the presentation the
 //! person sees, with the same commands as the ribbon (each one undoable), and nothing else: the
@@ -732,7 +732,7 @@ pub fn mcp_config(cli: &Path, port: u16, token: &str) -> Value {
             "wordcraft": {
                 "type": "stdio",
                 "command": cli.to_string_lossy(),
-                "args": ["mcp", "--connect", format!("127.0.0.1:{port}")],
+                "args": ["mcp", "--bridge", format!("127.0.0.1:{port}")],
                 "env": { "WORDCRAFT_CONTROL_TOKEN": token },
             }
         }
@@ -743,7 +743,7 @@ pub fn mcp_config(cli: &Path, port: u16, token: &str) -> Value {
 pub fn mcp_server(cli: &Path, port: u16, token: &str) -> McpServer {
     McpServer {
         command: cli.to_path_buf(),
-        args: vec!["mcp".into(), "--connect".into(), format!("127.0.0.1:{port}")],
+        args: vec!["mcp".into(), "--bridge".into(), format!("127.0.0.1:{port}")],
         env: vec![("WORDCRAFT_CONTROL_TOKEN".into(), token.into())],
     }
 }
