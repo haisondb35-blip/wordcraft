@@ -6480,6 +6480,9 @@ dependencies = [
  "raw-window-handle",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "web-sys",
  "windows-sys 0.61.2",
 ]
@@ -9001,7 +9004,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft",
  "craft-clipboard",
@@ -9009,10 +9012,13 @@ dependencies = [
  "eframe",
  "egui",
  "log",
+ "rfd",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "winit",
  "winresource",
+ "winsafe",
  "wordcraft-control-key",
  "wordcraft-doc",
  "wordcraft-engine",
@@ -9025,7 +9031,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-cli"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft-zip",
  "image",
@@ -9042,11 +9048,11 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-control-key"
-version = "0.18.15"
+version = "0.18.16"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "base64 0.23.1",
  "craft-codepage",
@@ -9062,7 +9068,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docbin"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "cfb",
  "craft-doc-binary",
@@ -9074,7 +9080,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "base64 0.23.1",
  "cfb",
@@ -9093,7 +9099,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-engine"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "cfb",
  "chrono",
@@ -9131,7 +9137,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-fonts"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "brotli-decompressor 5.0.3",
  "harfrust 0.13.3",
@@ -9146,7 +9152,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-formats"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "chardetng",
  "chrono",
@@ -9176,7 +9182,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft-image-codecs",
  "craft-tiff",
@@ -9186,7 +9192,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-layout"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft-metafile",
  "craft-proof",
@@ -9206,7 +9212,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-mcp"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft",
  "craft-mcp-server",
@@ -9220,7 +9226,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-pdf"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "chrono",
  "craft-metafile",
@@ -9241,7 +9247,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-render"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft-metafile",
  "image",
@@ -9255,7 +9261,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-ui-egui"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "cfb",
  "chrono",
@@ -9291,7 +9297,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-web"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "craft",
  "eframe",
@@ -9311,7 +9317,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-zotero"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "log",
  "proptest",
@@ -9529,7 +9535,7 @@ checksum = "9440ea3e5aeabb0ac63af70daf835274065238cdd0cec83418f417eae38bacee"
 
 [[package]]
 name = "xtask"
-version = "0.18.15"
+version = "0.18.16"
 dependencies = [
  "serde_json",
 ]

@@ -56,6 +56,8 @@ pub mod md_source;
 pub mod mini_toolbar;
 pub mod objects;
 pub mod options;
+/// The window identity of the channel this build runs as (stable or Nightly).
+pub mod os_window;
 pub mod panes;
 pub mod paste_picture;
 pub mod prefs;
@@ -582,6 +584,8 @@ pub(crate) fn rust_sources(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     files
 }
 
+#[cfg(test)]
+mod file_browser;
 #[cfg(test)]
 mod test_harness;
 #[cfg(test)]

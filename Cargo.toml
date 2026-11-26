@@ -14,7 +14,7 @@ run_slots = 3
 test_threads = 4
 
 [workspace.package]
-version = "0.18.15"
+version = "0.18.16"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
