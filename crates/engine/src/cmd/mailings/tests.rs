@@ -576,9 +576,16 @@ fn labels_from_a_list_with_unknown_column_names_are_not_blank() {
     s.run("mailings.recipients", &json!({"csv": "Họ tên,Địa chỉ,Thành phố\nNguyễn Văn An,Số 12 Lê Lợi,Huế\nTrần Thị Bình,,Hà Nội"})).unwrap();
     let r = s.run("mailings.labels", &json!({"fromRecipients": true})).unwrap();
     assert_eq!(r["filled"], 2);
-    let text = s.doc.plain_text(StoryRef::Body);
-    let lines: Vec<_> = text.split(['\n', '\r', '\t']).map(str::trim).filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines, ["Nguyễn Văn An", "Số 12 Lê Lợi", "Huế", "Trần Thị Bình", "Hà Nội"]);
+    let t = s.doc.body.iter().find_map(|b| b.as_table()).expect("a sheet of labels");
+    // The first two labels: across the first row, past the gap column if the sheet has one.
+    let labels: Vec<Vec<String>> = t.rows[0]
+        .cells
+        .iter()
+        .map(|c| c.blocks.iter().filter_map(|b| b.as_para()).map(|p| p.plain_text()).filter(|l| !l.is_empty()).collect::<Vec<_>>())
+        .filter(|l| !l.is_empty())
+        .take(2)
+        .collect();
+    assert_eq!(labels, [vec!["Nguyễn Văn An", "Số 12 Lê Lợi", "Huế"], vec!["Trần Thị Bình", "Hà Nội"]]);
 }
 
 fn b64(b: &[u8]) -> String {
