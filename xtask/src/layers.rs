@@ -40,6 +40,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craft-sync", Class::Layer(0)),
     ("geom", Class::Layer(0)),
     ("control-key", Class::Standalone),
+    ("validate", Class::Standalone),
     ("doc", Class::Layer(1)),
     ("fonts", Class::Layer(1)),
     ("layout", Class::Layer(2)),

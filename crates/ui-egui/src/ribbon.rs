@@ -150,14 +150,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) -> RibbonOutput<String> {
             .checked(track),
     ];
     let ends = [
-        // The strip lays these out start to end, so Share, the old strip's outermost button, comes last. As the old
-        // strip drew them: Comments and Editing outlined, Share a filled accent button.
+        // The strip lays these out start to end, so Share, the old strip's outermost button, comes last. Comments and
+        // Editing are plain (ghost) buttons, as in v0.18.1; Share is a filled accent button.
         // brian-local: the AI Assistant pane (Claude or ChatGPT working on the document), beside Comments.
-        StripEnd::command(tl!("AI Assistant").to_string(), IconSpec::svg(IconId::new("researcher")), CommandRef::new("ui.claudePane"))
-            .variant(Variant::SECONDARY),
-        StripEnd::command(tl!("Comments").to_string(), IconSpec::svg(IconId::new("comment")), CommandRef::new("view.commentsPane"))
-            .variant(Variant::SECONDARY),
-        StripEnd::menu(editing_label.to_string(), IconSpec::svg(IconId::new("wordcraft.pencil")), &modes).variant(Variant::SECONDARY),
+        StripEnd::command(tl!("AI Assistant").to_string(), IconSpec::svg(IconId::new("researcher")), CommandRef::new("ui.claudePane")),
+        StripEnd::command(tl!("Comments").to_string(), IconSpec::svg(IconId::new("comment")), CommandRef::new("view.commentsPane")),
+        StripEnd::menu(editing_label.to_string(), IconSpec::svg(IconId::new("wordcraft.pencil")), &modes),
         StripEnd::command(
             tl!("Share").to_string(),
             IconSpec::svg(IconId::new("share")),
