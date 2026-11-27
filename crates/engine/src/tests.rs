@@ -14503,11 +14503,13 @@ fn a_pasted_table_overwrites_the_selected_cells() {
     assert_eq!(t.rows.len(), 4);
     assert_eq!((text(3, 1), text(3, 2), text(3, 0)), ("Còn".into(), "900".into(), String::new()));
     assert_eq!(text(0, 0), "");
-    // A caret in one cell still nests the table, as Word does.
+    // A caret in one cell overwrites from that cell too (#6739); Paste as Nested Table nests.
     run(&mut s, "caret.set", json!({"pos": at(0, 0)}));
     run(&mut s, "edit.paste", json!({"text": "a\tb", "html": "<table><tr><td>a</td><td>b</td></tr></table>"}));
     let t = s.doc.body[ti as usize].as_table().unwrap();
-    assert!(t.rows[0].cells[0].blocks.iter().any(|b| b.as_table().is_some()));
+    let text = |r: usize, c: usize| crate::cmd::table::cell_text(&t.rows[r].cells[c]);
+    assert_eq!((text(0, 0), text(0, 1)), ("a".into(), "b".into()));
+    assert!(t.rows[0].cells[0].blocks.iter().all(|b| b.as_table().is_none()), "no nested table");
 }
 
 #[test]

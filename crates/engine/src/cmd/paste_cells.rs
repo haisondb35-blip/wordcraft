@@ -138,15 +138,12 @@ fn plan(dest: &Table, src: &Table, src_cols: usize, row0: usize, col0: usize, al
 
 /// Overwrite cells from the top-left of a selection while it still identifies a rectangle.
 pub(super) fn paste_over_selection(s: &mut Session, frag: &Fragment) -> Result<bool, CmdError> {
-    let Some(range) = s.cell_range() else { return Ok(false) };
+    let Some((story, table, row, col)) = selected_cells_start(s) else { return Ok(false) };
     if s.doc.settings.track_changes || s.doc.control_at(&s.sel.ordered().0).is_some() {
         return Ok(false);
     }
     let Some(src) = lone_table(frag) else { return Ok(false) };
     let Some(src_cols) = plain_source(src) else { return Ok(false) };
-    let (row, col) = (range.rows.0, range.cols.0);
-    let story = range.story;
-    let table = range.table.clone();
     let Some(dest) = s.doc.table(story, &table) else { return Ok(false) };
     let Some(edit) = plan(dest, src, src_cols, row, col, false) else { return Ok(false) };
     apply_plan(s, src, story, &table, row, col, edit)?;
@@ -154,6 +151,21 @@ pub(super) fn paste_over_selection(s: &mut Session, frag: &Fragment) -> Result<b
     s.goal_x = None;
     s.pending = None;
     Ok(true)
+}
+
+/// The top-left (story, table, row, column) of the selected cells: a cell selection, or a
+/// selection from one cell of a table into another (made by `select.range`, say). The column is
+/// the cell's index; [`plan`] accepts only plain grids, where the two agree.
+fn selected_cells_start(s: &Session) -> Option<(StoryRef, Path, usize, usize)> {
+    if let Some(r) = s.cell_range() {
+        return Some((r.story, r.table.clone(), r.rows.0, r.cols.0));
+    }
+    let (a, b) = s.sel.ordered();
+    let ((ta, ra, ca), (tb, rb, cb)) = (a.path.cell()?, b.path.cell()?);
+    if a.story != b.story || ta != tb || (ra, ca) == (rb, cb) {
+        return None;
+    }
+    Some((a.story, ta, ra.min(rb), ca.min(cb)))
 }
 
 /// A copied table pasted with the caret in a table cell, as Word's default Paste does it.
