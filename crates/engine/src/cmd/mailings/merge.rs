@@ -74,6 +74,13 @@ pub(super) fn address_block(s: &Session, row: usize) -> String {
         .filter(|x| !x.is_empty())
         .collect::<Vec<_>>()
         .join(", ");
+    let known = ["title", "firstName", "lastName", "company", "address", "city", "state", "postal", "country"];
+    if known.iter().all(|k| m.get(*k).is_none_or(Value::is_null)) {
+        // No column has a name we know (a list headed in another language): the record's
+        // values in column order, rather than a blank block.
+        let row = s.merge.rows.get(row).map(Vec::as_slice).unwrap_or_default();
+        return row.iter().map(|v| v.trim()).filter(|v| !v.is_empty()).collect::<Vec<_>>().join("\n");
+    }
     [name, g("company"), g("address"), city_line, g("country")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n")
 }
 

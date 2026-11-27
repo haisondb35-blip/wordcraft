@@ -568,6 +568,19 @@ fn recipient_label_sheets_keep_the_source_and_selected_order() {
     assert_eq!(s.undo_depth(), 1, "the source keeps its edit history");
 }
 
+/// A list whose columns have no names we know (headed in Vietnamese) still fills its labels:
+/// each label holds that recipient's values in column order.
+#[test]
+fn labels_from_a_list_with_unknown_column_names_are_not_blank() {
+    let mut s = Session::new(Document::from_text(""));
+    s.run("mailings.recipients", &json!({"csv": "Họ tên,Địa chỉ,Thành phố\nNguyễn Văn An,Số 12 Lê Lợi,Huế\nTrần Thị Bình,,Hà Nội"})).unwrap();
+    let r = s.run("mailings.labels", &json!({"fromRecipients": true})).unwrap();
+    assert_eq!(r["filled"], 2);
+    let text = s.doc.plain_text(StoryRef::Body);
+    let lines: Vec<_> = text.split(['\n', '\r', '\t']).map(str::trim).filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines, ["Nguyễn Văn An", "Số 12 Lê Lợi", "Huế", "Trần Thị Bình", "Hà Nội"]);
+}
+
 fn b64(b: &[u8]) -> String {
     super::super::insert::base64_encode(b)
 }
